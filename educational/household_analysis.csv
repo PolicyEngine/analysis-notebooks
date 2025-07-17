@@ -1,0 +1,2 @@
+employment_income,adjusted_gross_income,taxable_income,income_tax,ctc_value,eitc,snap,state_code,household_net_income,household_id,scenario
+120000.0,120000.0,90000.0,6323.0,4000.0,0.0,0.0,4,102116.85,household,baseline

@@ -40,7 +40,8 @@ def create_aei_reform():
         definition_period = YEAR
 
         def formula(household, period, parameters):
-            income = household.sum(household.members("adjusted_gross_income", period))
+            # Sum AGI from all tax units in the household
+            income = household.sum(household.members.tax_unit("adjusted_gross_income", period))
             fpg = household("household_fpg", period)
             income_to_fpg_ratio = where(fpg > 0, income / fpg, np.inf)
             

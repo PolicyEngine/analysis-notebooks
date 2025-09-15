@@ -1,6 +1,7 @@
 import pytest
 import numpy as np
-from policyengine_us import Microsimulation
+from policyengine_us import Microsimulation, CountryTaxBenefitSystem
+from policyengine_core import Simulation
 from aei_rebate import create_aei_reform
 
 
@@ -32,17 +33,18 @@ class TestAEIRebate:
             },
             "tax_units": {
                 "tax_unit": {
-                    "members": ["person"]
+                    "members": ["person"],
+                    "adjusted_gross_income": {"2026": 24046},  # 150% of FPG
                 }
             },
             "people": {
-                "person": {
-                    "adjusted_gross_income": {"2026": 30000},  # 150% of $20k FPG
-                }
+                "person": {}
             }
         }
         
-        sim = Microsimulation(situation=test_situation, reform=create_aei_reform())
+        reform = create_aei_reform()
+        tax_benefit_system = CountryTaxBenefitSystem(reform=reform)
+        sim = Simulation(tax_benefit_system=tax_benefit_system, situation=test_situation)
         rebate = sim.calculate("ca_aei_rebate", 2026)
         fpg = sim.calculate("household_fpg", period=2026)
         
@@ -60,17 +62,18 @@ class TestAEIRebate:
             },
             "tax_units": {
                 "tax_unit": {
-                    "members": ["person"]
+                    "members": ["person"],
+                    "adjusted_gross_income": {"2026": 32062},  # 200% of FPG (above 175% cutoff)
                 }
             },
             "people": {
-                "person": {
-                    "adjusted_gross_income": {"2026": 40000},  # 200% of $20k FPG
-                }
+                "person": {}
             }
         }
         
-        sim = Microsimulation(situation=test_situation, reform=create_aei_reform())
+        reform = create_aei_reform()
+        tax_benefit_system = CountryTaxBenefitSystem(reform=reform)
+        sim = Simulation(tax_benefit_system=tax_benefit_system, situation=test_situation)
         rebate = sim.calculate("ca_aei_rebate", 2026)
         
         # Should get no rebate
@@ -87,17 +90,18 @@ class TestAEIRebate:
             },
             "tax_units": {
                 "tax_unit": {
-                    "members": ["person"]
+                    "members": ["person"],
+                    "adjusted_gross_income": {"2026": 26050},  # 162.5% of FPG (midpoint of phase-out)
                 }
             },
             "people": {
-                "person": {
-                    "adjusted_gross_income": {"2026": 32500},  # 162.5% of $20k FPG (midpoint)
-                }
+                "person": {}
             }
         }
         
-        sim = Microsimulation(situation=test_situation, reform=create_aei_reform())
+        reform = create_aei_reform()
+        tax_benefit_system = CountryTaxBenefitSystem(reform=reform)
+        sim = Simulation(tax_benefit_system=tax_benefit_system, situation=test_situation)
         rebate = sim.calculate("ca_aei_rebate", 2026)
         fpg = sim.calculate("household_fpg", period=2026)
         

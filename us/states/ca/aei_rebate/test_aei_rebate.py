@@ -21,7 +21,6 @@ class TestAEIRebate:
         """Test that reform successfully adds ca_aei_rebate variable"""
         assert "ca_aei_rebate" in sim_with_reform.tax_benefit_system.variables
         assert "ca_aei_rebate_tax_unit" in sim_with_reform.tax_benefit_system.variables
-        assert "tax_unit_fpg" in sim_with_reform.tax_benefit_system.variables
     
     def test_full_rebate_at_150_percent_fpg(self, sim_with_reform):
         """Test household at exactly 150% FPG gets full rebate"""

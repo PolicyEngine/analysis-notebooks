@@ -12,8 +12,8 @@ import time
 from policyengine_us import Microsimulation
 from policyengine_core.reforms import Reform
 
-def create_full_obbba_reform():
-    """Full OBBBA reform exactly as in obbba.ipynb"""
+def create_obbba_reform():
+    """OBBBA reform exactly as in obbba.ipynb"""
     return Reform.from_dict({
         # Estate tax changes
         "gov.irs.credits.estate.base": {
@@ -150,7 +150,7 @@ def create_full_obbba_reform():
 
     }, country_id="us")
 
-def setup_simulation(dataset_path, reform=None, year=2023):
+def setup_simulation(dataset_path, reform=None):
     """Setup simulation with state corrections"""
     print("  Loading simulation...", end="", flush=True)
     start = time.time()
@@ -160,16 +160,16 @@ def setup_simulation(dataset_path, reform=None, year=2023):
     else:
         sim = Microsimulation(dataset=dataset_path)
 
-    # Fix state FIPS codes - use the dataset year
+    # Fix state FIPS codes
     cd_geoids = sim.calculate("congressional_district_geoid").values
     correct_state_fips = cd_geoids // 100
-    sim.set_input("state_fips", year, correct_state_fips)
+    sim.set_input("state_fips", 2023, correct_state_fips)
 
     # Clear cached calculations
     if "state_name" in sim.tax_benefit_system.variables:
-        sim.delete_arrays("state_name", year)
+        sim.delete_arrays("state_name", 2023)
     if "state_code" in sim.tax_benefit_system.variables:
-        sim.delete_arrays("state_code", year)
+        sim.delete_arrays("state_code", 2023)
 
     print(f" done ({time.time()-start:.1f}s)")
     return sim
@@ -207,17 +207,16 @@ def calculate_nj_only(sim, period=2026):
 
 def main():
     print("=" * 70)
-    print("NJ WINNERS/LOSERS WITH FULL OBBBA REFORM")
+    print("NJ WINNERS/LOSERS WITH OBBBA REFORM")
     print("Optimized for better hardware")
     print("=" * 70)
 
     dataset_path = "hf://policyengine/test/sparse_cd_stacked_2023.h5"
-    year = 2023  # Dataset year
-    period = 2026  # Analysis period for reform effects
+    period = 2026
 
     print("\nThis script will:")
     print("1. Calculate baseline household_net_income for NJ")
-    print("2. Apply full OBBBA reform")
+    print("2. Apply OBBBA reform")
     print("3. Calculate reformed household_net_income for NJ")
     print("4. Analyze winners and losers by district")
 
@@ -228,7 +227,7 @@ def main():
         print("-" * 70)
         start_baseline = time.time()
 
-        sim_baseline = setup_simulation(dataset_path, year=year)
+        sim_baseline = setup_simulation(dataset_path)
         baseline_income, weights, districts = calculate_nj_only(sim_baseline, period)
 
         print(f"Baseline complete in {time.time()-start_baseline:.1f}s")
@@ -243,8 +242,8 @@ def main():
         print("-" * 70)
         start_reform = time.time()
 
-        reform = create_full_obbba_reform()
-        sim_reform = setup_simulation(dataset_path, reform=reform, year=year)
+        reform = create_obbba_reform()
+        sim_reform = setup_simulation(dataset_path, reform=reform)
         reform_income, _, _ = calculate_nj_only(sim_reform, period)
 
         print(f"Reform complete in {time.time()-start_reform:.1f}s")
@@ -330,10 +329,10 @@ def main():
 
         # Save results
         results_df = pd.DataFrame(results)
-        results_df.to_csv('nj_obbba_full_results.csv', index=False)
+        results_df.to_csv('nj_obbba_results.csv', index=False)
 
         print("\n" + "=" * 70)
-        print("Results saved to nj_obbba_full_results.csv")
+        print("Results saved to nj_obbba_results.csv")
         print(f"Total runtime: {time.time()-start_baseline:.1f}s")
         print("=" * 70)
 

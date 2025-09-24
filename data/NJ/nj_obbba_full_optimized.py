@@ -150,7 +150,7 @@ def create_full_obbba_reform():
 
     }, country_id="us")
 
-def setup_simulation(dataset_path, reform=None):
+def setup_simulation(dataset_path, reform=None, year=2023):
     """Setup simulation with state corrections"""
     print("  Loading simulation...", end="", flush=True)
     start = time.time()
@@ -160,16 +160,16 @@ def setup_simulation(dataset_path, reform=None):
     else:
         sim = Microsimulation(dataset=dataset_path)
 
-    # Fix state FIPS codes
+    # Fix state FIPS codes - use the dataset year
     cd_geoids = sim.calculate("congressional_district_geoid").values
     correct_state_fips = cd_geoids // 100
-    sim.set_input("state_fips", 2023, correct_state_fips)
+    sim.set_input("state_fips", year, correct_state_fips)
 
     # Clear cached calculations
     if "state_name" in sim.tax_benefit_system.variables:
-        sim.delete_arrays("state_name", 2023)
+        sim.delete_arrays("state_name", year)
     if "state_code" in sim.tax_benefit_system.variables:
-        sim.delete_arrays("state_code", 2023)
+        sim.delete_arrays("state_code", year)
 
     print(f" done ({time.time()-start:.1f}s)")
     return sim
@@ -212,7 +212,8 @@ def main():
     print("=" * 70)
 
     dataset_path = "hf://policyengine/test/sparse_cd_stacked_2023.h5"
-    period = 2026
+    year = 2023  # Dataset year
+    period = 2026  # Analysis period for reform effects
 
     print("\nThis script will:")
     print("1. Calculate baseline household_net_income for NJ")
@@ -227,7 +228,7 @@ def main():
         print("-" * 70)
         start_baseline = time.time()
 
-        sim_baseline = setup_simulation(dataset_path)
+        sim_baseline = setup_simulation(dataset_path, year=year)
         baseline_income, weights, districts = calculate_nj_only(sim_baseline, period)
 
         print(f"Baseline complete in {time.time()-start_baseline:.1f}s")
@@ -243,7 +244,7 @@ def main():
         start_reform = time.time()
 
         reform = create_full_obbba_reform()
-        sim_reform = setup_simulation(dataset_path, reform=reform)
+        sim_reform = setup_simulation(dataset_path, reform=reform, year=year)
         reform_income, _, _ = calculate_nj_only(sim_reform, period)
 
         print(f"Reform complete in {time.time()-start_reform:.1f}s")

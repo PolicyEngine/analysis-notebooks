@@ -12,8 +12,8 @@ import time
 from policyengine_us import Microsimulation
 from policyengine_core.reforms import Reform
 
-def create_full_obbba_reform():
-    """Full OBBBA reform exactly as in obbba.ipynb"""
+def create_obbba_reform():
+    """OBBBA reform exactly as in obbba.ipynb"""
     return Reform.from_dict({
         # Estate tax changes
         "gov.irs.credits.estate.base": {
@@ -207,7 +207,7 @@ def calculate_nj_only(sim, period=2026):
 
 def main():
     print("=" * 70)
-    print("NJ WINNERS/LOSERS WITH FULL OBBBA REFORM")
+    print("NJ WINNERS/LOSERS WITH OBBBA REFORM")
     print("Optimized for better hardware")
     print("=" * 70)
 
@@ -216,7 +216,7 @@ def main():
 
     print("\nThis script will:")
     print("1. Calculate baseline household_net_income for NJ")
-    print("2. Apply full OBBBA reform")
+    print("2. Apply OBBBA reform")
     print("3. Calculate reformed household_net_income for NJ")
     print("4. Analyze winners and losers by district")
 
@@ -242,7 +242,7 @@ def main():
         print("-" * 70)
         start_reform = time.time()
 
-        reform = create_full_obbba_reform()
+        reform = create_obbba_reform()
         sim_reform = setup_simulation(dataset_path, reform=reform)
         reform_income, _, _ = calculate_nj_only(sim_reform, period)
 
@@ -329,10 +329,10 @@ def main():
 
         # Save results
         results_df = pd.DataFrame(results)
-        results_df.to_csv('nj_obbba_full_results.csv', index=False)
+        results_df.to_csv('nj_obbba_results.csv', index=False)
 
         print("\n" + "=" * 70)
-        print("Results saved to nj_obbba_full_results.csv")
+        print("Results saved to nj_obbba_results.csv")
         print(f"Total runtime: {time.time()-start_baseline:.1f}s")
         print("=" * 70)
 

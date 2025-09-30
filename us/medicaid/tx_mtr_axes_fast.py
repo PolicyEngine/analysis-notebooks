@@ -217,7 +217,7 @@ def main():
     # Baseline MTR (solid line)
     fig.add_trace(go.Scatter(
         x=baseline_mtr_incomes,
-        y=np.clip(baseline_mtrs, -2.0, 2.0),
+        y=np.clip(baseline_mtrs, -1.0, 1.0),
         mode='lines',
         name='Baseline',
         line=dict(color=DARK_GRAY, width=2),
@@ -227,7 +227,7 @@ def main():
     # Reform MTR (dashed line)
     fig.add_trace(go.Scatter(
         x=reform_mtr_incomes,
-        y=np.clip(reform_mtrs, -2.0, 2.0),
+        y=np.clip(reform_mtrs, -1.0, 1.0),
         mode='lines',
         name='IRA Extension',
         line=dict(color=BLUE_PRIMARY, width=2, dash='dash'),
@@ -247,7 +247,7 @@ def main():
         ),
         yaxis=dict(
             tickformat='.0%',
-            range=[-2.0, 2.0],
+            range=[-1.0, 1.0],
             gridcolor='lightgray',
             showgrid=True,
             zeroline=True,
@@ -271,20 +271,20 @@ def main():
     fig = format_fig(fig)
     fig.show()
 
-    # Save outputs
-    fig.write_image("tx_mtr_baseline_vs_reform_fast.png", width=1000, height=600, scale=2)
+    # Save outputs with extra height for logo
+    fig.write_image("tx_mtr_baseline_vs_reform_fast.png", width=1000, height=650, scale=2)
     print("Chart saved as tx_mtr_baseline_vs_reform_fast.png")
 
     # Save data
     combined_df = pd.DataFrame({
         'income': baseline_mtr_incomes,
         'baseline_mtr': baseline_mtrs,
-        'baseline_mtr_display': np.clip(baseline_mtrs, -2.0, 2.0)
+        'baseline_mtr_display': np.clip(baseline_mtrs, -1.0, 1.0)
     }).merge(
         pd.DataFrame({
             'income': reform_mtr_incomes,
             'reform_mtr': reform_mtrs,
-            'reform_mtr_display': np.clip(reform_mtrs, -2.0, 2.0)
+            'reform_mtr_display': np.clip(reform_mtrs, -1.0, 1.0)
         }),
         on='income',
         how='outer'

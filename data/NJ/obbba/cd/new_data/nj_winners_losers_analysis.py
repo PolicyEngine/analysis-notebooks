@@ -11,8 +11,7 @@ from policyengine_core.reforms import Reform
 # Configuration
 YEAR = 2026
 STATE_CODE = "NJ"
-DATASET = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
-
+DATASET = 'hf://policyengine/test/NJ.h5'
 print("Loading PolicyEngine data...")
 
 # Initialize baseline simulation
@@ -20,7 +19,7 @@ baseline = Microsimulation(dataset=DATASET)
 
 # Get state codes for filtering
 state_codes = baseline.calculate("state_code", YEAR).values
-household_weights = baseline.calculate("household_weight", YEAR).valuesi
+household_weights = baseline.calculate("household_weight", YEAR).values
 household_ids = baseline.calculate("household_id", YEAR).values
 
 # Filter to NJ households

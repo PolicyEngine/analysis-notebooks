@@ -1,41 +1,76 @@
 """
-NJ Winners and Losers Analysis by Income Decile
-Analyzes impact of OBBBA reform on households in New Jersey
+NJ 11th Congressional District Winners and Losers Analysis
+Using hf://policyengine/test/NJ.h5 dataset
 """
 
 import pandas as pd
 import numpy as np
 from policyengine_us import Microsimulation
 from policyengine_core.reforms import Reform
+import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 
 # Configuration
 YEAR = 2026
-STATE_CODE = "NJ"
-DATASET = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5"
+TARGET_CD_GEOID = 3411
+DATASET = "hf://policyengine/test/NJ.h5"
 
-print("Loading PolicyEngine data...")
+print("=" * 60)
+print("USING DATASET: NJ.h5")
+print("=" * 60)
+print(f"\nLoading data for CD {TARGET_CD_GEOID}...")
 
 # Initialize baseline simulation
+print("Loading baseline simulation (this may take a few minutes)...")
 baseline = Microsimulation(dataset=DATASET)
+print("Baseline simulation loaded.")
 
-# Get state codes for filtering
-state_codes = baseline.calculate("state_code", YEAR).values
-household_weights = baseline.calculate("household_weight", YEAR).valuesi
+# Get congressional district IDs for filtering
+print("Extracting congressional district data...")
+cd_geoids = baseline.calculate("congressional_district_geoid", YEAR).values
+household_weights = baseline.calculate("household_weight", YEAR).values
 household_ids = baseline.calculate("household_id", YEAR).values
 
-# Filter to NJ households
-nj_mask = state_codes == STATE_CODE
-nj_household_ids = household_ids[nj_mask]
-nj_weights = household_weights[nj_mask]
+# DIAGNOSTIC: Check what districts exist in the dataset
+print("\n" + "="*60)
+print("DIAGNOSTIC: Checking all congressional districts in dataset")
+print("="*60)
+unique_districts = np.unique(cd_geoids)
+print(f"Unique congressional district GEOIDs: {unique_districts}")
+print(f"Total unique districts: {len(unique_districts)}")
 
-print(f"Found {len(nj_household_ids)} NJ households")
+# Check NJ districts specifically
+nj_mask_all = (cd_geoids >= 3400) & (cd_geoids < 3500)
+nj_districts = np.unique(cd_geoids[nj_mask_all])
+print(f"\nNJ districts found (3400-3499): {nj_districts}")
 
-# Calculate baseline household incomes for NJ
-print("Calculating baseline values for NJ households...")
-baseline_net_income = baseline.calculate("household_net_income", YEAR).values[nj_mask]
-baseline_household_income = baseline.calculate("household_net_income", YEAR).values[nj_mask]
+# Show population for each NJ district
+print("\nNJ District breakdown:")
+for district in sorted(nj_districts):
+    mask = cd_geoids == district
+    count = mask.sum()
+    weighted_pop = household_weights[mask].sum()
+    print(f"  GEOID {district}: {count} households, weighted pop: {weighted_pop:,.0f}")
 
-# Calculate weighted income deciles for NJ households
+# First, let's check what we have for all of NJ
+print(f"\nTotal NJ households in dataset: {nj_mask_all.sum()}")
+print(f"Total NJ weighted population: {household_weights[nj_mask_all].sum():,.0f}")
+
+# Filter to NJ 11th congressional district
+cd_mask = cd_geoids == TARGET_CD_GEOID
+cd11_household_ids = household_ids[cd_mask]
+cd11_weights = household_weights[cd_mask]
+
+print(f"\nFound {len(cd11_household_ids)} households in NJ's 11th congressional district")
+print(f"Weighted population in CD11: {cd11_weights.sum():,.0f}")
+print(f"Weight statistics - Min: {cd11_weights.min():.2f}, Max: {cd11_weights.max():.2f}, Mean: {cd11_weights.mean():.2f}")
+
+# Calculate baseline household incomes for CD11
+print("\nCalculating baseline values for CD11 households...")
+baseline_net_income = baseline.calculate("household_net_income", YEAR).values[cd_mask]
+baseline_household_income = baseline.calculate("household_net_income", YEAR).values[cd_mask]
+
+# Calculate weighted income deciles for CD11 households
 print("Calculating income deciles...")
 
 def calculate_weighted_deciles(values, weights):
@@ -73,10 +108,10 @@ def calculate_weighted_deciles(values, weights):
 
 # Calculate deciles based on baseline household income
 household_deciles, decile_boundaries = calculate_weighted_deciles(
-    baseline_household_income, nj_weights
+    baseline_household_income, cd11_weights
 )
 
-print("Income decile boundaries (household_income):")
+print("\nIncome decile boundaries (household_net_income):")
 for i, boundary in enumerate(decile_boundaries):
     print(f"  Decile {i+1} upper bound: ${boundary:,.0f}")
 
@@ -822,16 +857,23 @@ reform = Reform.from_dict({
 }, country_id="us")
 
 # Apply reform
+print("Loading reform simulation (this may take a few minutes)...")
 reformed = Microsimulation(reform=reform, dataset=DATASET)
+print("Reform simulation loaded.")
 
-# Calculate reformed values for NJ households
-print("Calculating reformed values for NJ households...")
-reformed_net_income = reformed.calculate("household_net_income", YEAR).values[nj_mask]
+# Calculate reformed values for CD11 households
+print("Calculating reformed values for CD11 households...")
+reformed_net_income = reformed.calculate("household_net_income", YEAR).values[cd_mask]
 
 # Calculate net income changes
 print("\nCalculating income changes...")
 income_changes = reformed_net_income - baseline_net_income
 percent_changes = (income_changes / baseline_net_income) * 100
+
+# Handle infinity and NaN values
+percent_changes = np.where(baseline_net_income == 0, 0, percent_changes)
+percent_changes = np.where(np.isinf(percent_changes), 0, percent_changes)
+percent_changes = np.nan_to_num(percent_changes, 0)
 
 # Categorize winners and losers
 winners = income_changes > 0
@@ -840,7 +882,7 @@ no_change = income_changes == 0
 
 # Create results dataframe
 results = pd.DataFrame({
-    'household_id': nj_household_ids,
+    'household_id': cd11_household_ids,
     'decile': household_deciles,
     'household_income': baseline_household_income,
     'baseline_net_income': baseline_net_income,
@@ -850,7 +892,7 @@ results = pd.DataFrame({
     'category': pd.cut(percent_changes,
                        bins=[-np.inf, -5, -1e-10, 1e-10, 5, np.inf],
                        labels=['Lose >5%', 'Lose <5%', 'No change', 'Gain <5%', 'Gain >5%']),
-    'weight': nj_weights
+    'weight': cd11_weights
 })
 
 # Aggregate by decile
@@ -861,7 +903,12 @@ for decile in range(1, 11):
     decile_mask = results['decile'] == decile
     decile_data = results[decile_mask]
 
+    if len(decile_data) == 0:
+        continue
+
     total_weight = decile_data['weight'].sum()
+    if total_weight == 0:
+        continue
 
     winners_weight = decile_data[decile_data['income_change'] > 0]['weight'].sum()
     losers_weight = decile_data[decile_data['income_change'] < 0]['weight'].sum()
@@ -896,32 +943,34 @@ for decile in range(1, 11):
 summary_df = pd.DataFrame(decile_summary)
 
 # Display results
-print("\n=== Winners and Losers by Income Decile ===")
+print("\n=== Winners and Losers by Income Decile (NJ CD11 - NJ.h5) ===")
 print(summary_df.to_string())
 
-# Save to CSV
-output_file = '/Users/daphnehansell/Documents/GitHub/analysis-notebooks/us/medicaid/nj_winners_losers_by_decile.csv'
+# Save to CSV with clear filename
+output_file = '/Users/daphnehansell/Documents/GitHub/analysis-notebooks/data/NJ/obbba/cd/new_data/nj_cd11_winners_losers_by_decile.csv'
 summary_df.to_csv(output_file, index=False)
 print(f"\nResults saved to: {output_file}")
 
 # Save detailed household results for verification
-detailed_file = '/Users/daphnehansell/Documents/GitHub/analysis-notebooks/us/medicaid/nj_winners_losers_detailed.csv'
+detailed_file = '/Users/daphnehansell/Documents/GitHub/analysis-notebooks/data/NJ/obbba/cd/new_data/nj_cd11_winners_losers_detailed.csv'
 results.to_csv(detailed_file, index=False)
 print(f"Detailed results saved to: {detailed_file}")
 
 # Print summary statistics
-print("\n=== Overall Summary ===")
+print("\n=== Overall Summary (NJ.h5 DATASET) ===")
 total_weight = results['weight'].sum()
-print(f"Total NJ households analyzed: {len(results)}")
+print(f"Dataset: NJ.h5")
+print(f"Total NJ CD11 households analyzed: {len(results)}")
 print(f"Total weighted population: {total_weight:,.0f}")
-print(f"Overall % winners: {results[results['income_change'] > 0]['weight'].sum() / total_weight * 100:.1f}%")
-print(f"Overall % losers: {results[results['income_change'] < 0]['weight'].sum() / total_weight * 100:.1f}%")
-print(f"Overall % no change: {results[results['income_change'] == 0]['weight'].sum() / total_weight * 100:.1f}%")
+overall_winners_pct = results[results['income_change'] > 0]['weight'].sum() / total_weight * 100
+overall_losers_pct = results[results['income_change'] < 0]['weight'].sum() / total_weight * 100
+overall_no_change_pct = results[results['income_change'] == 0]['weight'].sum() / total_weight * 100
+print(f"Overall % winners: {overall_winners_pct:.1f}%")
+print(f"Overall % losers: {overall_losers_pct:.1f}%")
+print(f"Overall % no change: {overall_no_change_pct:.1f}%")
 
-# Create visualizations
-print("\n=== Creating Visualizations ===")
-import matplotlib.pyplot as plt
-import numpy as np
+# Create visualization
+print("\n=== Creating Visualization ===")
 
 # PolicyEngine color scheme for the diverging chart
 colors = {
@@ -955,58 +1004,49 @@ overall_lose_5plus = results[results['percent_change'] < -5]['weight'].sum() / t
 all_data = [overall_gain_5plus, overall_gain_less5, overall_no_change, overall_lose_less5, overall_lose_5plus]
 
 # Create y-positions for bars (reversed so 1 is at top)
-y_labels = ['All'] + [str(i) for i in range(10, 0, -1)]
+# Only include deciles that exist in summary_df
+existing_deciles = summary_df['decile'].values
+y_labels = ['All'] + [str(d) for d in range(10, 0, -1) if d in existing_deciles]
 y_pos = np.arange(len(y_labels))
 
-# Plot horizontal bars - centered diverging
-left_accum = np.zeros(len(y_labels))
-right_accum = np.zeros(len(y_labels))
-
-# Gains go to the right (positive)
+# Plot horizontal bars - stacked
 # Add "All" bar data
-right_accum[0] = all_data[0]  # gain_5plus
-ax.barh(y_pos[0], all_data[0], left=0, height=0.8,
-        color=colors['gain_5plus'], edgecolor='white', linewidth=0.5)
-ax.barh(y_pos[0], all_data[1], left=right_accum[0], height=0.8,
-        color=colors['gain_less5'], edgecolor='white', linewidth=0.5)
-right_accum[0] += all_data[1]
+left_pos = 0
+for i, (value, color_key) in enumerate(zip(all_data, ['gain_5plus', 'gain_less5', 'no_change', 'lose_less5', 'lose_5plus'])):
+    ax.barh(y_pos[0], value, left=left_pos, height=0.8,
+            color=colors[color_key], edgecolor='white', linewidth=0.5)
+    if value > 5:
+        ax.text(left_pos + value/2, y_pos[0], f'{value:.0f}%',
+               ha='center', va='center', fontsize=10,
+               color='white' if color_key.endswith('5plus') else 'black')
+    left_pos += value
 
-# No change in the middle
-ax.barh(y_pos[0], all_data[2], left=right_accum[0], height=0.8,
-        color=colors['no_change'], edgecolor='white', linewidth=0.5)
-right_accum[0] += all_data[2]
+# Add decile bars - only for existing deciles
+for label_idx, label in enumerate(y_labels[1:], 1):  # Skip "All"
+    decile = int(label)
+    if decile in existing_deciles:
+        decile_idx = list(existing_deciles).index(decile)
 
-# Losses continue to the right
-ax.barh(y_pos[0], all_data[3], left=right_accum[0], height=0.8,
-        color=colors['lose_less5'], edgecolor='white', linewidth=0.5)
-right_accum[0] += all_data[3]
-ax.barh(y_pos[0], all_data[4], left=right_accum[0], height=0.8,
-        color=colors['lose_5plus'], edgecolor='white', linewidth=0.5)
+        # Reset accumulator for each bar
+        left_pos = 0
 
-# Add decile bars
-for i in range(10):
-    y_idx = 10 - i  # Reverse order
-    decile_idx = i
+        # Plot each category
+        for cat_name, cat_color in [('gain_5plus', colors['gain_5plus']),
+                                     ('gain_less5', colors['gain_less5']),
+                                     ('no_change', colors['no_change']),
+                                     ('lose_less5', colors['lose_less5']),
+                                     ('lose_5plus', colors['lose_5plus'])]:
+            value = categories_data[cat_name][decile_idx]
+            if value > 0:
+                ax.barh(y_pos[label_idx], value, left=left_pos, height=0.8,
+                       color=cat_color, edgecolor='white', linewidth=0.5)
 
-    # Reset accumulator for each bar
-    left_pos = 0
-
-    # Plot each category
-    for cat_name, cat_color in [('gain_5plus', colors['gain_5plus']),
-                                 ('gain_less5', colors['gain_less5']),
-                                 ('no_change', colors['no_change']),
-                                 ('lose_less5', colors['lose_less5']),
-                                 ('lose_5plus', colors['lose_5plus'])]:
-        value = categories_data[cat_name][decile_idx]
-        if value > 0:
-            ax.barh(y_pos[y_idx], value, left=left_pos, height=0.8,
-                   color=cat_color, edgecolor='white', linewidth=0.5)
-
-            # Add percentage label if significant
-            if value > 5:
-                ax.text(left_pos + value/2, y_pos[y_idx], f'{value:.0f}%',
-                       ha='center', va='center', fontsize=10, color='white' if cat_name.endswith('5plus') else 'black')
-            left_pos += value
+                # Add percentage label if significant
+                if value > 5:
+                    ax.text(left_pos + value/2, y_pos[label_idx], f'{value:.0f}%',
+                           ha='center', va='center', fontsize=10,
+                           color='white' if cat_name.endswith('5plus') else 'black')
+                left_pos += value
 
 # Styling
 ax.set_yticks(y_pos)
@@ -1027,11 +1067,10 @@ ax.set_axisbelow(True)
 # Title
 overall_winners = overall_gain_5plus + overall_gain_less5
 overall_losers = overall_lose_less5 + overall_lose_5plus
-ax.set_title(f'Policy would increase the net income for {overall_winners:.0f}% of the population\nin New Jersey and decrease it for {overall_losers:.0f}% in 2026',
+ax.set_title(f'OBBBA reform would increase the net income for {overall_winners:.0f}% of the population\nin NJ\'s 11th Congressional District and decrease it for {overall_losers:.0f}% in 2026\n(NJ.h5 DATASET)',
             fontsize=14, fontweight='bold', pad=20)
 
 # Legend
-from matplotlib.patches import Patch
 legend_elements = [
     Patch(facecolor=colors['gain_5plus'], label='Gain more than 5%'),
     Patch(facecolor=colors['gain_less5'], label='Gain less than 5%'),
@@ -1051,23 +1090,9 @@ ax.spines['bottom'].set_color('#CCCCCC')
 fig.patch.set_facecolor('white')
 plt.tight_layout()
 
-output_chart = '/Users/daphnehansell/Documents/GitHub/analysis-notebooks/us/medicaid/nj_winners_losers_chart.png'
+output_chart = '/Users/daphnehansell/Documents/GitHub/analysis-notebooks/data/NJ/obbba/cd/new_data/nj_cd11_winners_losers_chart.png'
 plt.savefig(output_chart, dpi=150, bbox_inches='tight', facecolor='white', edgecolor='none')
 print(f"Chart saved to: {output_chart}")
-# plt.show()  # Comment out to avoid hanging
 
-print("\n=== Script for Congressional District Analysis ===")
-print("""
-To adapt this for congressional district analysis, your coworker should:
-
-1. Replace the state filter with a congressional district filter:
-   # Instead of: nj_mask = state_codes == STATE_CODE
-   # Use: cd_mask = congressional_district_geoid == TARGET_CD_GEOID
-
-2. Use the congressional district dataset:
-   dataset = "hf://policyengine/test/sparse_cd_stacked_2023.h5"
-
-3. The rest of the analysis remains the same!
-
-The key is filtering early to reduce memory usage before calculating incomes.
-""")
+print("\n=== Analysis Complete ===")
+print("NJ.h5 dataset analysis complete.")

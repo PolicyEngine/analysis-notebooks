@@ -1,0 +1,21 @@
+Metric,Value
+Number of households in dataset,"5,015"
+Household count (mapped to household),"220,449"
+Person count (mapped to household),"668,071"
+Median AGI,"$120,221"
+75th percentile AGI,"$327,906"
+90th percentile AGI,"$546,746"
+95th percentile AGI,"$915,476"
+Max AGI,"$3,229,514"
+Households over $80k,"135,496"
+Households over $120k,"110,302"
+Households over $160k,"91,709"
+Households over $240k,"68,994"
+Total households with children,984
+Households with 1 child,984
+Households with 2 children,0
+Households with 3+ children,0
+Total children under 18,"136,125"
+Children under 4,"32,540"
+Children under 6,"48,094"
+Children ages 6-17,"1,834"

@@ -1,7 +1,6 @@
 Metric,Value
-Number of households in dataset,"13,672"
-Household count (mapped to household),"220,449"
-Person count (mapped to household),"668,071"
+Household count (weighted),"220,449"
+Person count (weighted),"668,071"
 Median AGI,"$120,221"
 75th percentile AGI,"$327,906"
 90th percentile AGI,"$546,746"

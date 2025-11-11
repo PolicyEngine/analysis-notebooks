@@ -1,0 +1,5 @@
+Scenario,Net Cost,Overall Poverty Rate,Overall Poverty Change,Child Poverty Rate,Child Poverty Change,People Lifted from Poverty,Children Lifted from Poverty
+Baseline,$0.00M,23.93%,0.0%,28.71%,0.0%,0,0
+EITC Only,$6.56M,23.93%,0.0%,28.71%,0.0%,0,0
+CTC Only,$85.78M,23.57%,1.5%,27.70%,3.5%,"2,175","1,218"
+Combined (EITC + CTC),$92.34M,23.56%,1.5%,27.69%,3.5%,"2,419","1,279"

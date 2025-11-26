@@ -1,11 +1,11 @@
 Metric,Value
-Number of households in dataset,"2,368"
-Number of persons in dataset,"5,888"
-Households with children (unweighted),616
-Households with 1 child (unweighted),305
-Households with 2 children (unweighted),201
-Households with 3+ children (unweighted),110
-Children under 18 (unweighted),"1,079"
-Children under 4 (unweighted),254
-Children under 6 (unweighted),373
-Children ages 6-17 (unweighted),706
+Number of households in dataset,"8,617"
+Number of persons in dataset,"26,217"
+Households with children (unweighted),"3,717"
+Households with 1 child (unweighted),"1,427"
+Households with 2 children (unweighted),"1,438"
+Households with 3+ children (unweighted),852
+Children under 18 (unweighted),"7,257"
+Children under 4 (unweighted),"1,221"
+Children under 6 (unweighted),"1,975"
+Children ages 6-17 (unweighted),"5,282"

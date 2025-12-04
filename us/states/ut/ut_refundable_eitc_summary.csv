@@ -1,0 +1,10 @@
+Example,Fed EITC,UT EITC,Refundable,Benefit,Status
+"1: Child age 1, $20k","$4,328",$866,$866,$865.60,PASS
+"2: Child age 5, $20k","$4,328",$866,$0,$0.00,PASS
+"3: Infant age 0, $15k","$4,328",$866,$866,$865.60,PASS
+"4: Kids age 1 & 7, $25k","$6,805","$1,361","$1,361","$1,360.91",PASS
+"5: Child age 2, $18k","$4,328",$866,$866,$865.60,PASS
+"6: Child age 3, $18k","$4,328",$866,$0,$0.00,PASS
+"7: Childless, $12k",$543,$109,$0,$0.00,PASS
+"8: Child age 1, $0",$0,$0,$0,$0.00,PASS
+"9: Child age 1, $5k","$1,700",$340,$340,$340.00,PASS

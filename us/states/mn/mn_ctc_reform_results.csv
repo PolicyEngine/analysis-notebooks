@@ -1,2 +1,2 @@
 Scenario,Description,Net Cost,% Population Winning,% Population Losing,Avg Gain (Winners),Avg Loss (Losers),Overall Poverty Change (%),Child Poverty Change (%),People Lifted from Poverty,Children Lifted from Poverty
-MN CTC Reform,"CTC $2,000 + 20% phase-out rate",$24.44M,17.58%,17.67%,$441.15,$-486.30,0.69%,1.62%,"5,814","4,544"
+MN CTC Reform,"CTC $2,000 + 20% phase-out rate",$-0.21M,12.63%,12.14%,$439.90,$-545.76,-0.15%,-0.47%,"-1,234",-630

@@ -1,0 +1,6 @@
+Scenario,Year,EITC Cost,CTC Cost,Total Cost,Child Poverty Rate,Children in Poverty
+Baseline,2025,$120.35M,$16.02M,$136.38M,20.23%,"26,660"
+EITC Reform,2025,$137.88M,$16.02M,$153.90M,19.22%,"25,319"
+Baseline,2026,$121.22M,$16.30M,$137.52M,21.73%,"28,832"
+New CTC Only,2026,$121.22M,$94.80M,$216.02M,17.78%,"23,598"
+EITC + CTC,2026,$138.88M,$94.80M,$233.67M,17.78%,"23,598"

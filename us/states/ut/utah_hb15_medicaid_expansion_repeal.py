@@ -41,10 +41,10 @@ eligibility is controlled by the parameter:
 
 No structural reform code is needed - just a parameter change.
 
-Key Findings (using Utah-calibrated dataset):
-- ~125,000 people would lose Medicaid eligibility
-- ~96,000 would fall into the "coverage gap" (no ACA subsidies available)
-- ~28,500 would gain ACA Premium Tax Credit eligibility
+Key Findings (using Utah-calibrated dataset with 93% takeup rate):
+- ~117,000 people would lose Medicaid enrollment
+- ~90,500 would fall into the "coverage gap" (no ACA subsidies available)
+- ~26,700 would gain ACA Premium Tax Credit eligibility
 - Utah would save ~$99 million/year (10% state share)
 - Federal government would save ~$729 million/year (net of increased ACA costs)
 
@@ -132,19 +132,16 @@ def run_analysis():
     # Tax unit-level weights (for ACA PTC)
     tu_weights = baseline.calculate("tax_unit_weight", YEAR).values
 
-    # Medicaid eligibility (person level)
-    baseline_medicaid_eligible = baseline.calculate(
-        "is_medicaid_eligible", YEAR
+    # Medicaid enrollment (accounts for 93% takeup rate)
+    baseline_medicaid_enrolled = baseline.calculate(
+        "medicaid_enrolled", YEAR
     ).values
-    reform_medicaid_eligible = reform.calculate(
-        "is_medicaid_eligible", YEAR
+    reform_medicaid_enrolled = reform.calculate(
+        "medicaid_enrolled", YEAR
     ).values
 
-    # Adult expansion category (directly affected by reform)
-    baseline_adult_eligible = baseline.calculate(
-        "is_adult_for_medicaid", YEAR
-    ).values
-    reform_adult_eligible = reform.calculate(
+    # Adult expansion category flag (for breakdown)
+    is_adult_for_medicaid = baseline.calculate(
         "is_adult_for_medicaid", YEAR
     ).values
 
@@ -166,8 +163,8 @@ def run_analysis():
     # Calculate Coverage Changes
     # =========================================================================
 
-    # People who lose Medicaid eligibility
-    loses_medicaid = baseline_medicaid_eligible & ~reform_medicaid_eligible
+    # People who lose Medicaid enrollment
+    loses_medicaid = baseline_medicaid_enrolled & ~reform_medicaid_enrolled
 
     # People who lose Medicaid but gain ACA PTC eligibility
     loses_medicaid_gains_ptc = (
@@ -188,9 +185,9 @@ def run_analysis():
         loses_medicaid_no_coverage.astype(float) * person_weights
     )
 
-    # Adult category changes
-    adults_losing_eligibility = np.sum(
-        (baseline_adult_eligible & ~reform_adult_eligible).astype(float)
+    # Adults in expansion category who lose enrollment
+    adults_losing_enrollment = np.sum(
+        (loses_medicaid & is_adult_for_medicaid).astype(float)
         * person_weights
     )
 
@@ -245,7 +242,7 @@ def run_analysis():
         f"People losing Medicaid eligibility:      {people_losing_medicaid:>15,.0f}"
     )
     print(
-        f"  Adults (expansion category):           {adults_losing_eligibility:>15,.0f}"
+        f"  Adults (expansion category):           {adults_losing_enrollment:>15,.0f}"
     )
     print()
     print("Coverage transitions for those losing Medicaid:")
@@ -295,7 +292,7 @@ def run_analysis():
         "year": YEAR,
         "coverage": {
             "people_losing_medicaid": people_losing_medicaid,
-            "adults_losing_eligibility": adults_losing_eligibility,
+            "adults_losing_enrollment": adults_losing_enrollment,
             "people_gaining_ptc": people_gaining_ptc,
             "people_in_coverage_gap": people_in_coverage_gap,
         },
@@ -334,13 +331,13 @@ THIS ANALYSIS ASSUMES THE TRIGGER CONDITION IS MET.
 
 Key policy implications if expansion is repealed:
 
-1. COVERAGE GAP: ~96,000 people (77%) would fall into the "coverage
+1. COVERAGE GAP: ~90,500 people (77%) would fall into the "coverage
    gap" - below 100% FPL where ACA subsidies aren't available.
 
-2. ACA TRANSITION: ~28,500 people (23%) would gain ACA Premium Tax
+2. ACA TRANSITION: ~26,700 people (23%) would gain ACA Premium Tax
    Credit eligibility, costing the federal government ~$160M/year.
 
-3. FISCAL TRADEOFF: Utah saves ~$99M/year, but ~96,000 residents
+3. FISCAL TRADEOFF: Utah saves ~$99M/year, but ~90,500 residents
    lose health coverage with no alternative.
 
 4. FEDERAL IMPACT: Federal government saves ~$729M/year net

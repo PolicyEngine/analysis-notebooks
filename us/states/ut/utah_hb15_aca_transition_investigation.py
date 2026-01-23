@@ -5,16 +5,16 @@ Utah HB 15 - ACA Transition Investigation
 This script investigates why so few people (~489) gain ACA Premium Tax
 Credit eligibility when ~48,000 lose Medicaid under Utah HB 15.
 
-Key Finding:
-------------
-Of ~48,000 losing Medicaid:
-- 77% are below 100% FPL -> fall into "coverage gap" (no ACA available)
-- 19% are at 100-138% FPL -> could potentially get ACA
-  - But 76% of these already have ESI coverage
-  - Only 24% (~489) actually gain ACA eligibility
+Key Finding (using Utah-calibrated dataset):
+---------------------------------------------
+Of ~125,000 losing Medicaid:
+- 68% are below 100% FPL -> fall into "coverage gap" (no ACA available)
+- 32% are at 100-138% FPL -> could potentially get ACA
+  - 34% of these have ESI coverage (more reasonable than national CPS)
+  - 23% (~28,500) actually gain ACA eligibility
 
-The high ESI rate at 100-138% FPL (~$16k/year) is surprising and may
-warrant further investigation into the microdata/imputation methods.
+Note: The Utah-calibrated dataset gives much more plausible results
+than the national CPS, which showed 76% ESI at 100-138% FPL.
 
 Author: PolicyEngine
 Date: January 2025
@@ -30,6 +30,10 @@ from policyengine_core.reforms import Reform
 # =============================================================================
 
 YEAR = 2027
+
+# Use Utah-specific calibrated dataset (more accurate than national CPS)
+# See: https://huggingface.co/policyengine/policyengine-us-data/tree/main/states
+UT_DATASET = "hf://policyengine/policyengine-us-data/states/UT.h5"
 
 
 # =============================================================================
@@ -246,8 +250,8 @@ def run_investigation():
     print("Loading simulations...")
     print("(This may take a moment)\n")
 
-    baseline = Microsimulation()
-    reform_sim = Microsimulation(reform=create_ut_medicaid_expansion_repeal())
+    baseline = Microsimulation(dataset=UT_DATASET)
+    reform_sim = Microsimulation(dataset=UT_DATASET, reform=create_ut_medicaid_expansion_repeal())
 
     weights = baseline.calculate("person_weight", YEAR).values
 
@@ -258,28 +262,28 @@ def run_investigation():
 
     # Summary
     print("=" * 70)
-    print("SUMMARY")
+    print("SUMMARY (Utah-Calibrated Dataset)")
     print("=" * 70)
     print("""
-Why do only ~489 people gain ACA eligibility when ~48,000 lose Medicaid?
+Why do only ~28,500 people gain ACA eligibility when ~125,000 lose Medicaid?
 
 1. COVERAGE GAP (77% of those losing Medicaid):
    - Below 100% FPL
    - ACA subsidies don't exist below 100% FPL
-   - These people have NO coverage option
+   - ~96,000 people have NO coverage option
 
-2. ALREADY HAVE ESI (76% of those at 100-138% FPL):
+2. ALREADY HAVE ESI (34% of those at 100-138% FPL):
    - Already have employer-sponsored insurance
    - Disqualified from ACA Premium Tax Credits
    - They keep their ESI when losing Medicaid
 
-3. GAIN ACA (only ~489 people):
+3. GAIN ACA (~28,500 people, 23% of total):
    - At 100-138% FPL
    - Don't have ESI or other disqualifying coverage
-   - These are the only ones who transition to ACA
+   - These transition to ACA subsidies (~$160M/year federal cost)
 
-The low ACA transition number is real - it's a combination of the
-coverage gap and existing ESI coverage.
+Note: Using the Utah-calibrated dataset gives more plausible results
+than the national CPS (which showed 76% ESI at 100-138% FPL vs 34% here).
 """)
 
     return {

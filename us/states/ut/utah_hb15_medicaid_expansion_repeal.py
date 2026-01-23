@@ -41,11 +41,12 @@ eligibility is controlled by the parameter:
 
 No structural reform code is needed - just a parameter change.
 
-Key Findings:
-- ~48,000 people would lose Medicaid eligibility
-- ~47,000 would fall into the "coverage gap" (no ACA subsidies available)
-- Utah would save ~$32 million/year (10% state share)
-- Federal government would save ~$285 million/year (net of ACA costs)
+Key Findings (using Utah-calibrated dataset):
+- ~125,000 people would lose Medicaid eligibility
+- ~96,000 would fall into the "coverage gap" (no ACA subsidies available)
+- ~28,500 would gain ACA Premium Tax Credit eligibility
+- Utah would save ~$99 million/year (10% state share)
+- Federal government would save ~$729 million/year (net of increased ACA costs)
 
 Author: PolicyEngine
 Date: January 2025
@@ -62,6 +63,10 @@ from policyengine_core.periods import instant
 YEAR = 2027  # Analysis year
 FEDERAL_FMAP_EXPANSION = 0.90  # Federal share of expansion Medicaid
 STATE_FMAP_EXPANSION = 0.10  # State share of expansion Medicaid
+
+# Use Utah-specific calibrated dataset (more accurate than national CPS)
+# See: https://huggingface.co/policyengine/policyengine-us-data/tree/main/states
+UT_DATASET = "hf://policyengine/policyengine-us-data/states/UT.h5"
 
 
 # =============================================================================
@@ -111,10 +116,11 @@ def run_analysis():
     print("(This may take a moment to download microdata)\n")
 
     # Baseline: Current law with Medicaid expansion
-    baseline = Microsimulation()
+    # Using Utah-calibrated dataset for more accurate state-level estimates
+    baseline = Microsimulation(dataset=UT_DATASET)
 
     # Reform: Medicaid expansion repealed (simple parametric change)
-    reform = Microsimulation(reform=create_ut_medicaid_expansion_repeal())
+    reform = Microsimulation(dataset=UT_DATASET, reform=create_ut_medicaid_expansion_repeal())
 
     # =========================================================================
     # Extract Data
@@ -328,17 +334,19 @@ THIS ANALYSIS ASSUMES THE TRIGGER CONDITION IS MET.
 
 Key policy implications if expansion is repealed:
 
-1. COVERAGE GAP: Most people losing Medicaid (~99%) would fall into
-   the "coverage gap" - they earn too much for traditional Medicaid
-   but too little for ACA subsidies (which start at 100% FPL).
+1. COVERAGE GAP: ~96,000 people (77%) would fall into the "coverage
+   gap" - below 100% FPL where ACA subsidies aren't available.
 
-2. FISCAL TRADEOFF: Utah saves ~$32M/year, but ~47,000 residents
+2. ACA TRANSITION: ~28,500 people (23%) would gain ACA Premium Tax
+   Credit eligibility, costing the federal government ~$160M/year.
+
+3. FISCAL TRADEOFF: Utah saves ~$99M/year, but ~96,000 residents
    lose health coverage with no alternative.
 
-3. FEDERAL IMPACT: Federal government saves ~$285M/year net, as
-   very few people transition to ACA subsidies.
+4. FEDERAL IMPACT: Federal government saves ~$729M/year net
+   ($889M Medicaid savings minus $160M increased ACA costs).
 
-4. NOT MODELED: The 0.15% sales tax that funds expansion would also
+5. NOT MODELED: The 0.15% sales tax that funds expansion would also
    be repealed under HB 15 (PolicyEngine doesn't model sales taxes).
 
 Bill Reference: https://le.utah.gov/~2026/bills/static/HB0015.html

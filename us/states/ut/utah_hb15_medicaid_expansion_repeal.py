@@ -7,6 +7,28 @@ Medicaid expansion if federal matching falls below 85%.
 
 Bill Reference: https://le.utah.gov/~2026/bills/static/HB0015.html
 
+Important Context:
+------------------
+HB 15 does NOT automatically repeal Medicaid expansion. It creates a
+contingent repeal that triggers only if federal FMAP drops below 85%.
+This analysis models the scenario WHERE THE TRIGGER CONDITION IS MET
+and expansion is repealed.
+
+What HB 15 actually does:
+- Repeals expansion IF federal matching falls below 85%
+- Gives state 60 days to implement coverage changes after trigger
+- Repeals the 0.15% sales tax that funds expansion (not modeled here)
+- Effective date: May 6, 2026
+
+What this analysis models:
+- Removal of expansion Medicaid eligibility for adults
+- Coverage gap impact (people losing Medicaid who don't qualify for ACA)
+- Fiscal impact (federal/state savings)
+
+What this analysis does NOT model:
+- The 60-day implementation window (minor for annual analysis)
+- The 0.15% sales tax repeal (PolicyEngine doesn't model sales taxes)
+
 Reform Approach:
 ----------------
 This analysis uses a simple parametric reform. Utah's Medicaid expansion
@@ -298,11 +320,13 @@ if __name__ == "__main__":
     print("=" * 65)
     print(
         """
-Utah HB 15 (2026) would repeal Medicaid expansion if the federal
-matching rate (FMAP) falls below 85%. Currently, the federal government
-pays 90% of expansion Medicaid costs.
+Utah HB 15 (2026) creates a CONTINGENT repeal of Medicaid expansion.
+Expansion would end only if federal matching (FMAP) drops below 85%.
+Currently, the federal government pays 90% of expansion Medicaid costs.
 
-Key policy implications:
+THIS ANALYSIS ASSUMES THE TRIGGER CONDITION IS MET.
+
+Key policy implications if expansion is repealed:
 
 1. COVERAGE GAP: Most people losing Medicaid (~99%) would fall into
    the "coverage gap" - they earn too much for traditional Medicaid
@@ -313,6 +337,9 @@ Key policy implications:
 
 3. FEDERAL IMPACT: Federal government saves ~$285M/year net, as
    very few people transition to ACA subsidies.
+
+4. NOT MODELED: The 0.15% sales tax that funds expansion would also
+   be repealed under HB 15 (PolicyEngine doesn't model sales taxes).
 
 Bill Reference: https://le.utah.gov/~2026/bills/static/HB0015.html
 """

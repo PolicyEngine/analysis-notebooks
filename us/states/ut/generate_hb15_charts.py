@@ -78,12 +78,13 @@ def generate_table_data():
     print("=" * 60)
 
     # Selected income levels for parent+child
+    # Note: Utah has parent Medicaid at 46% FPL, so very low income parents still get coverage
     parent_incomes = [
-        (15000, "68%", "Coverage gap for parent"),
+        (8000, "36%", "Parent Medicaid (below 46% FPL)"),
+        (12000, "54%", "Coverage gap (above 46% FPL)"),
         (22138, "100%", "FPL threshold"),
-        (25000, "113%", "ACA eligible"),
         (30550, "138%", "Expansion limit"),
-        (35000, "158%", "Above expansion"),
+        (35000, "158%", "Above expansion (CHIP)"),
     ]
 
     print(f"{'Income':<12} {'% FPL':<8} {'Parent Medicaid (B)':<20} {'Parent Medicaid (R)':<20} {'Child Medicaid/CHIP':<20} {'ACA PTC (B)':<14} {'ACA PTC (R)':<14} {'Notes'}")

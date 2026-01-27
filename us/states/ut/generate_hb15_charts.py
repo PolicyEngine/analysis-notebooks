@@ -1,4 +1,4 @@
-"""Generate charts for Utah HB 15 blog post using axes feature."""
+"""Generate charts and tables for Utah HB 15 blog post."""
 
 import plotly.graph_objects as go
 from policyengine_us import Simulation
@@ -11,6 +11,10 @@ GRAY = '#808080'
 BLUE_PRIMARY = '#2C6496'
 TEAL_ACCENT = '#39C6C0'
 DARK_GRAY = '#616161'
+
+# FPL values for 2027
+FPL_1_PERSON = 16334
+FPL_2_PERSON = 22138
 
 
 def create_ut_medicaid_expansion_repeal():
@@ -29,7 +33,95 @@ def create_ut_medicaid_expansion_repeal():
     return reform
 
 
-def main():
+def generate_table_data():
+    """Generate table data at selected income levels."""
+
+    print("=" * 60)
+    print("SINGLE ADULT TABLE DATA")
+    print("=" * 60)
+
+    # Selected income levels for single adult
+    single_incomes = [
+        (12000, "75%", "Coverage gap"),
+        (16334, "100%", "FPL threshold"),
+        (18000, "110%", "ACA eligible"),
+        (22541, "138%", "Expansion limit"),
+        (25000, "153%", "Above expansion"),
+    ]
+
+    print(f"{'Income':<12} {'% FPL':<8} {'Medicaid (Base)':<18} {'Medicaid (Reform)':<18} {'ACA PTC (Base)':<16} {'ACA PTC (Reform)':<16} {'Notes'}")
+    print("-" * 120)
+
+    for income, fpl_pct, notes in single_incomes:
+        situation = {
+            'people': {'adult': {'age': {YEAR: 35}, 'employment_income': {YEAR: income}, 'monthly_hours_worked': {YEAR: 100}}},
+            'tax_units': {'tax_unit': {'members': ['adult']}},
+            'spm_units': {'spm_unit': {'members': ['adult']}},
+            'households': {'household': {'members': ['adult'], 'state_code': {YEAR: 'UT'}}},
+            'families': {'family': {'members': ['adult']}},
+            'marital_units': {'marital_unit': {'members': ['adult']}},
+        }
+
+        base = Simulation(situation=situation)
+        ref = Simulation(situation=situation, reform=create_ut_medicaid_expansion_repeal())
+
+        b_medicaid = base.calculate('medicaid', YEAR, map_to='person')[0]
+        r_medicaid = ref.calculate('medicaid', YEAR, map_to='person')[0]
+        b_ptc = base.calculate('premium_tax_credit', YEAR)[0]
+        r_ptc = ref.calculate('premium_tax_credit', YEAR)[0]
+
+        print(f"${income:<11,} {fpl_pct:<8} ${b_medicaid:<17,.0f} ${r_medicaid:<17,.0f} ${b_ptc:<15,.0f} ${r_ptc:<15,.0f} {notes}")
+
+    print()
+    print("=" * 60)
+    print("SINGLE PARENT + CHILD TABLE DATA")
+    print("=" * 60)
+
+    # Selected income levels for parent+child
+    parent_incomes = [
+        (15000, "68%", "Coverage gap for parent"),
+        (22138, "100%", "FPL threshold"),
+        (25000, "113%", "ACA eligible"),
+        (30550, "138%", "Expansion limit"),
+        (35000, "158%", "Above expansion"),
+    ]
+
+    print(f"{'Income':<12} {'% FPL':<8} {'Parent Medicaid (B)':<20} {'Parent Medicaid (R)':<20} {'Child Medicaid/CHIP':<20} {'ACA PTC (B)':<14} {'ACA PTC (R)':<14} {'Notes'}")
+    print("-" * 140)
+
+    for income, fpl_pct, notes in parent_incomes:
+        situation = {
+            'people': {
+                'parent': {'age': {YEAR: 30}, 'employment_income': {YEAR: income}, 'monthly_hours_worked': {YEAR: 100}},
+                'child': {'age': {YEAR: 8}},
+            },
+            'tax_units': {'tax_unit': {'members': ['parent', 'child']}},
+            'spm_units': {'spm_unit': {'members': ['parent', 'child']}},
+            'households': {'household': {'members': ['parent', 'child'], 'state_code': {YEAR: 'UT'}}},
+            'families': {'family': {'members': ['parent', 'child']}},
+            'marital_units': {'marital_unit': {'members': ['parent']}},
+        }
+
+        base = Simulation(situation=situation)
+        ref = Simulation(situation=situation, reform=create_ut_medicaid_expansion_repeal())
+
+        # Parent is index 0, child is index 1
+        b_parent_medicaid = base.calculate('medicaid', YEAR, map_to='person')[0]
+        r_parent_medicaid = ref.calculate('medicaid', YEAR, map_to='person')[0]
+        b_child_medicaid = base.calculate('medicaid', YEAR, map_to='person')[1]
+        r_child_medicaid = ref.calculate('medicaid', YEAR, map_to='person')[1]
+        b_ptc = base.calculate('premium_tax_credit', YEAR)[0]
+        r_ptc = ref.calculate('premium_tax_credit', YEAR)[0]
+
+        # Child medicaid should be same in both scenarios
+        child_coverage = f"${b_child_medicaid:,.0f}"
+
+        print(f"${income:<11,} {fpl_pct:<8} ${b_parent_medicaid:<19,.0f} ${r_parent_medicaid:<19,.0f} {child_coverage:<20} ${b_ptc:<13,.0f} ${r_ptc:<13,.0f} {notes}")
+
+
+def generate_charts():
+    """Generate charts for the blog post."""
+
     # Single adult situation with axes
     single_situation = {
         'people': {
@@ -78,12 +170,14 @@ def main():
 
     print('Calculating parent+child data...')
     parent_income = parent_base.calculate('employment_income', YEAR)
-    # Get only the parent's medicaid (index 0), not the child's
-    parent_baseline_medicaid = parent_base.calculate('medicaid', YEAR, map_to='person')[::2]  # Every other (parent only)
+    # Parent is every other starting at 0, child is every other starting at 1
+    parent_baseline_medicaid = parent_base.calculate('medicaid', YEAR, map_to='person')[::2]
     parent_baseline_ptc = parent_base.calculate('premium_tax_credit', YEAR, map_to='person')[::2]
     parent_reform_medicaid = parent_reform.calculate('medicaid', YEAR, map_to='person')[::2]
     parent_reform_ptc = parent_reform.calculate('premium_tax_credit', YEAR, map_to='person')[::2]
-    parent_income = parent_income[::2]  # Match the income array
+    # Child medicaid (same in baseline and reform)
+    child_medicaid = parent_base.calculate('medicaid', YEAR, map_to='person')[1::2]
+    parent_income = parent_income[::2]
 
     # Single Adult Chart
     print('Creating single adult chart...')
@@ -106,12 +200,13 @@ def main():
     fig.write_image('hb15_single_adult.png', scale=2)
     print('  Saved hb15_single_adult.png')
 
-    # Parent + Child Chart
+    # Parent + Child Chart (including child's Medicaid/CHIP)
     print('Creating parent+child chart...')
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=parent_income, y=parent_baseline_medicaid, mode='lines', name='Medicaid (Baseline)', line=dict(color=TEAL_ACCENT, width=2)))
+    fig.add_trace(go.Scatter(x=parent_income, y=parent_baseline_medicaid, mode='lines', name='Parent Medicaid (Baseline)', line=dict(color=TEAL_ACCENT, width=2)))
+    fig.add_trace(go.Scatter(x=parent_income, y=child_medicaid, mode='lines', name='Child Medicaid/CHIP', line=dict(color=GRAY, width=2)))
     fig.add_trace(go.Scatter(x=parent_income, y=parent_baseline_ptc, mode='lines', name='ACA PTC (Baseline)', line=dict(color=BLUE_PRIMARY, width=2)))
-    fig.add_trace(go.Scatter(x=parent_income, y=parent_reform_medicaid, mode='lines', name='Medicaid (Reform)', line=dict(color=TEAL_ACCENT, width=2, dash='dot')))
+    fig.add_trace(go.Scatter(x=parent_income, y=parent_reform_medicaid, mode='lines', name='Parent Medicaid (Reform)', line=dict(color=TEAL_ACCENT, width=2, dash='dot')))
     fig.add_trace(go.Scatter(x=parent_income, y=parent_reform_ptc, mode='lines', name='ACA PTC (Reform)', line=dict(color=BLUE_PRIMARY, width=2, dash='dot')))
     fig.update_layout(
         title='Single Parent + Child: Health Benefits by Income',
@@ -127,7 +222,13 @@ def main():
     fig.write_image('hb15_parent_child.png', scale=2)
     print('  Saved hb15_parent_child.png')
 
-    print('Done!')
+    print('Done with charts!')
+
+
+def main():
+    generate_table_data()
+    print()
+    generate_charts()
 
 
 if __name__ == '__main__':

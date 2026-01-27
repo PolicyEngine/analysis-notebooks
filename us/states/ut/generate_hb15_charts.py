@@ -109,12 +109,13 @@ def generate_table_data():
         b_parent_medicaid = base.calculate('medicaid', YEAR, map_to='person')[0]
         r_parent_medicaid = ref.calculate('medicaid', YEAR, map_to='person')[0]
         b_child_medicaid = base.calculate('medicaid', YEAR, map_to='person')[1]
-        r_child_medicaid = ref.calculate('medicaid', YEAR, map_to='person')[1]
+        b_child_chip = base.calculate('chip', YEAR, map_to='person')[1]
         b_ptc = base.calculate('premium_tax_credit', YEAR)[0]
         r_ptc = ref.calculate('premium_tax_credit', YEAR)[0]
 
-        # Child medicaid should be same in both scenarios
-        child_coverage = f"${b_child_medicaid:,.0f}"
+        # Child coverage = Medicaid + CHIP (same in both scenarios)
+        child_total = b_child_medicaid + b_child_chip
+        child_coverage = f"${child_total:,.0f}"
 
         print(f"${income:<11,} {fpl_pct:<8} ${b_parent_medicaid:<19,.0f} ${r_parent_medicaid:<19,.0f} {child_coverage:<20} ${b_ptc:<13,.0f} ${r_ptc:<13,.0f} {notes}")
 
@@ -135,7 +136,7 @@ def generate_charts():
         'households': {'household': {'members': ['adult'], 'state_code': {YEAR: 'UT'}}},
         'families': {'family': {'members': ['adult']}},
         'marital_units': {'marital_unit': {'members': ['adult']}},
-        'axes': [[{'name': 'employment_income', 'count': 500, 'min': 0, 'max': 50000}]],
+        'axes': [[{'name': 'employment_income', 'count': 500, 'min': 0, 'max': 120000}]],
     }
 
     # Parent + child situation with axes
@@ -152,7 +153,7 @@ def generate_charts():
         'households': {'household': {'members': ['parent', 'child'], 'state_code': {YEAR: 'UT'}}},
         'families': {'family': {'members': ['parent', 'child']}},
         'marital_units': {'marital_unit': {'members': ['parent']}},
-        'axes': [[{'name': 'employment_income', 'count': 500, 'min': 0, 'max': 50000}]],
+        'axes': [[{'name': 'employment_income', 'count': 500, 'min': 0, 'max': 120000}]],
     }
 
     print('Creating simulations...')
@@ -175,8 +176,10 @@ def generate_charts():
     parent_baseline_ptc = parent_base.calculate('premium_tax_credit', YEAR, map_to='person')[::2]
     parent_reform_medicaid = parent_reform.calculate('medicaid', YEAR, map_to='person')[::2]
     parent_reform_ptc = parent_reform.calculate('premium_tax_credit', YEAR, map_to='person')[::2]
-    # Child medicaid (same in baseline and reform)
+    # Child coverage = Medicaid + CHIP (same in baseline and reform)
     child_medicaid = parent_base.calculate('medicaid', YEAR, map_to='person')[1::2]
+    child_chip = parent_base.calculate('chip', YEAR, map_to='person')[1::2]
+    child_coverage = child_medicaid + child_chip
     parent_income = parent_income[::2]
 
     # Single Adult Chart
@@ -190,7 +193,7 @@ def generate_charts():
         title='Single Adult: Health Benefits by Income',
         xaxis_title='Household Income',
         yaxis_title='Benefit Amount',
-        xaxis=dict(tickformat='$,.0f', range=[0, 50000]),
+        xaxis=dict(tickformat='$,.0f', range=[0, 120000]),
         yaxis=dict(tickformat='$,.0f'),
         height=600,
         width=1000,
@@ -204,7 +207,7 @@ def generate_charts():
     print('Creating parent+child chart...')
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=parent_income, y=parent_baseline_medicaid, mode='lines', name='Parent Medicaid (Baseline)', line=dict(color=TEAL_ACCENT, width=2)))
-    fig.add_trace(go.Scatter(x=parent_income, y=child_medicaid, mode='lines', name='Child Medicaid/CHIP', line=dict(color=GRAY, width=2)))
+    fig.add_trace(go.Scatter(x=parent_income, y=child_coverage, mode='lines', name='Child Medicaid/CHIP', line=dict(color=GRAY, width=2)))
     fig.add_trace(go.Scatter(x=parent_income, y=parent_baseline_ptc, mode='lines', name='ACA PTC (Baseline)', line=dict(color=BLUE_PRIMARY, width=2)))
     fig.add_trace(go.Scatter(x=parent_income, y=parent_reform_medicaid, mode='lines', name='Parent Medicaid (Reform)', line=dict(color=TEAL_ACCENT, width=2, dash='dot')))
     fig.add_trace(go.Scatter(x=parent_income, y=parent_reform_ptc, mode='lines', name='ACA PTC (Reform)', line=dict(color=BLUE_PRIMARY, width=2, dash='dot')))
@@ -212,7 +215,7 @@ def generate_charts():
         title='Single Parent + Child: Health Benefits by Income',
         xaxis_title='Household Income',
         yaxis_title='Benefit Amount',
-        xaxis=dict(tickformat='$,.0f', range=[0, 50000]),
+        xaxis=dict(tickformat='$,.0f', range=[0, 120000]),
         yaxis=dict(tickformat='$,.0f'),
         height=600,
         width=1000,

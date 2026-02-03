@@ -1,13 +1,13 @@
 Metric,Value
-Household count (weighted),"2,353,653"
-Person count (weighted),"6,891,060"
-Median AGI,"$40,031"
-75th percentile AGI,"$207,486"
-90th percentile AGI,"$821,751"
-95th percentile AGI,"$1,864,716"
-99th percentile AGI,"$2,118,524"
-Max AGI,"$3,152,176"
-Median NYC Taxable Income,$0
-99th percentile NYC Taxable Income,$0
-Households with income >= $1M,0
-Pct of households with income >= $1M,0.00%
+Household count (weighted),"3,146,018"
+Person count (weighted),"8,461,234"
+Median AGI,"$48,746"
+75th percentile AGI,"$110,770"
+90th percentile AGI,"$227,831"
+95th percentile AGI,"$384,892"
+99th percentile AGI,"$3,972,415"
+Max AGI,"$5,626,860"
+Median NYC Taxable Income,"$27,325"
+99th percentile NYC Taxable Income,"$3,926,265"
+Households with income >= $1M,"100,112"
+Pct of households with income >= $1M,3.18%

@@ -2,16 +2,16 @@
 Utah HB 15 - ACA Transition Investigation
 =========================================
 
-This script investigates why so few people (~489) gain ACA Premium Tax
-Credit eligibility when ~48,000 lose Medicaid under Utah HB 15.
+This script investigates why so few people gain ACA Premium Tax
+Credit eligibility when losing Medicaid under Utah HB 15.
 
 Key Finding (using Utah-calibrated dataset with 93% takeup):
 -------------------------------------------------------------
-Of ~117,000 losing Medicaid enrollment:
-- 77% are below 100% FPL -> fall into "coverage gap" (no ACA available)
-- 23% are at 100-138% FPL -> could potentially get ACA
+Of ~84,200 losing Medicaid enrollment:
+- 86.5% are below 100% FPL -> fall into "coverage gap" (no ACA available)
+- 13.5% are at 100-138% FPL -> could potentially get ACA
   - Some of these have ESI coverage
-  - ~26,700 actually gain ACA eligibility
+  - ~11,400 actually gain ACA eligibility
 
 Note: The Utah-calibrated dataset gives much more plausible results
 than the national CPS, which showed 76% ESI at 100-138% FPL.
@@ -265,22 +265,22 @@ def run_investigation():
     print("SUMMARY (Utah-Calibrated Dataset)")
     print("=" * 70)
     print("""
-Why do only ~26,700 people gain ACA eligibility when ~117,000 lose Medicaid?
+Why do only ~11,400 people gain ACA eligibility when ~84,200 lose Medicaid?
 
-1. COVERAGE GAP (77% of those losing Medicaid):
+1. COVERAGE GAP (86.5% of those losing Medicaid):
    - Below 100% FPL
    - ACA subsidies don't exist below 100% FPL
-   - ~90,500 people have NO coverage option
+   - ~72,800 people have NO coverage option
 
 2. ALREADY HAVE ESI (some of those at 100-138% FPL):
    - Already have employer-sponsored insurance
    - Disqualified from ACA Premium Tax Credits
    - They keep their ESI when losing Medicaid
 
-3. GAIN ACA (~26,700 people, 23% of total):
+3. GAIN ACA (~11,400 people, 13.5% of total):
    - At 100-138% FPL
    - Don't have ESI or other disqualifying coverage
-   - These transition to ACA subsidies (~$160M/year federal cost)
+   - These transition to ACA subsidies (~$85M/year federal cost)
 
 Note: Using medicaid_enrolled (with 93% takeup rate) rather than
 is_medicaid_eligible for more realistic coverage counts.

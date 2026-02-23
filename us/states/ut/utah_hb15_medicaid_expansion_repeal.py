@@ -42,11 +42,11 @@ eligibility is controlled by the parameter:
 No structural reform code is needed - just a parameter change.
 
 Key Findings (using Utah-calibrated dataset with 93% takeup rate):
-- ~117,000 people would lose Medicaid enrollment
-- ~90,500 would fall into the "coverage gap" (no ACA subsidies available)
-- ~26,700 would gain ACA Premium Tax Credit eligibility
-- Utah would save ~$99 million/year (10% state share)
-- Federal government would save ~$729 million/year (net of increased ACA costs)
+- ~84,200 people would lose Medicaid enrollment
+- ~72,800 would fall into the "coverage gap" (no ACA subsidies available)
+- ~11,400 would gain ACA Premium Tax Credit eligibility
+- Utah would save ~$73 million/year (10% state share)
+- Federal government would save ~$575 million/year (net of increased ACA costs)
 
 Author: PolicyEngine
 Date: January 2025
@@ -331,17 +331,17 @@ THIS ANALYSIS ASSUMES THE TRIGGER CONDITION IS MET.
 
 Key policy implications if expansion is repealed:
 
-1. COVERAGE GAP: ~90,500 people (77%) would fall into the "coverage
+1. COVERAGE GAP: ~72,800 people (86.5%) would fall into the "coverage
    gap" - below 100% FPL where ACA subsidies aren't available.
 
-2. ACA TRANSITION: ~26,700 people (23%) would gain ACA Premium Tax
-   Credit eligibility, costing the federal government ~$160M/year.
+2. ACA TRANSITION: ~11,400 people (13.5%) would gain ACA Premium Tax
+   Credit eligibility, costing the federal government ~$85M/year.
 
-3. FISCAL TRADEOFF: Utah saves ~$99M/year, but ~90,500 residents
+3. FISCAL TRADEOFF: Utah saves ~$73M/year, but ~72,800 residents
    lose health coverage with no alternative.
 
-4. FEDERAL IMPACT: Federal government saves ~$729M/year net
-   ($889M Medicaid savings minus $160M increased ACA costs).
+4. FEDERAL IMPACT: Federal government saves ~$575M/year net
+   ($660M Medicaid savings minus $85M increased ACA costs).
 
 5. NOT MODELED: The 0.15% sales tax that funds expansion would also
    be repealed under HB 15 (PolicyEngine doesn't model sales taxes).

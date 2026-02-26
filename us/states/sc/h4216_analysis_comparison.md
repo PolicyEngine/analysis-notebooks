@@ -85,9 +85,11 @@ RFA shows existing tax liability for low-income filers ($50, $3, $16, $107 avg),
 | **Total** | **2,757,573** | **2,935,621** | 1.06x |
 
 **Key observations:**
-- PE has **7.85x more** $0 income returns (likely non-filers in CPS)
+- PE has **7.85x more** $0 income returns - **PE counts all tax units (including non-filers), RFA only counts actual filers**
 - PE has **~50% fewer** returns in $100k-$300k brackets
 - PE has **1.9x more** millionaire returns
+
+**Important note:** RFA uses actual SC tax return data (filers only). PolicyEngine uses CPS-based data representing all tax units regardless of filing status. This explains the large discrepancy in low-income brackets where many households don't file.
 
 ## Baseline Tax Liability Comparison
 
@@ -173,11 +175,13 @@ The $159M difference primarily comes from:
 
 The $159M difference is **not primarily a calculation issue** but stems from:
 
-1. **Different income distributions**: PE's CPS-based data has far more millionaires (22.7k vs 12k) paying much higher average taxes ($140k vs $78k)
+1. **Different populations**: PE counts all tax units (filers + non-filers), RFA counts only actual filers. This explains 540k extra returns in the $0 bracket.
 
-2. **Different return counts**: PE undercounts middle-income filers ($50k-$300k) by 40-50%
+2. **Different income distributions**: PE's CPS-based data has far more millionaires (22.7k vs 12k) paying much higher average taxes ($140k vs $78k)
 
-3. **Millionaire impact drives divergence**: H.4216 gives large tax cuts to millionaires. With PE having 2x more millionaires paying 2x higher taxes, the reform's impact on this group dominates.
+3. **Different return counts**: PE undercounts middle-income filers ($50k-$300k) by 40-50%
+
+4. **Millionaire impact drives divergence**: H.4216 gives large tax cuts to millionaires. With PE having 2x more millionaires paying 2x higher taxes, the reform's impact on this group dominates.
 
 ### Recommendation
 

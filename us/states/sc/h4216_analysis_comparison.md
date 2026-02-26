@@ -1,5 +1,9 @@
 # SC H.4216 Analysis Comparison: PolicyEngine vs RFA
 
+## Executive Summary
+
+The $159M difference between PolicyEngine (+$39.8M) and RFA (-$119.1M) is driven by **fundamentally different income distributions** in the underlying data, not calculation errors.
+
 ## Summary
 
 | Metric | RFA | PolicyEngine | Difference |
@@ -60,6 +64,51 @@ RFA shows existing tax liability for low-income filers ($50, $3, $16, $107 avg),
 - Different treatment of non-filers
 - CPS data may underrepresent low-income tax filers
 
+## Return Count Comparison (Key Finding)
+
+| AGI Range | RFA Returns | PE Returns | PE/RFA Ratio |
+|-----------|-------------|------------|--------------|
+| $0* | 78,854 | 619,009 | **7.85x** |
+| $1-$10k | 286,253 | 502,276 | 1.75x |
+| $10k-$20k | 310,122 | 279,412 | 0.90x |
+| $20k-$30k | 275,560 | 252,862 | 0.92x |
+| $30k-$40k | 269,566 | 215,980 | 0.80x |
+| $40k-$50k | 234,386 | 197,525 | 0.84x |
+| $50k-$75k | 407,593 | 300,857 | **0.74x** |
+| $75k-$100k | 250,437 | 177,284 | **0.71x** |
+| $100k-$150k | 298,343 | 187,945 | **0.63x** |
+| $150k-$200k | 143,398 | 73,396 | **0.51x** |
+| $200k-$300k | 109,340 | 52,882 | **0.48x** |
+| $300k-$500k | 56,123 | 36,977 | 0.66x |
+| $500k-$1M | 25,664 | 16,525 | 0.64x |
+| Over $1M | 11,936 | 22,686 | **1.90x** |
+| **Total** | **2,757,573** | **2,935,621** | 1.06x |
+
+**Key observations:**
+- PE has **7.85x more** $0 income returns (likely non-filers in CPS)
+- PE has **~50% fewer** returns in $100k-$300k brackets
+- PE has **1.9x more** millionaire returns
+
+## Baseline Tax Liability Comparison
+
+| AGI Range | RFA Avg Tax | PE Avg Tax | Difference |
+|-----------|-------------|------------|------------|
+| $0-$10k | $3-$50 | $0 | PE shows no tax |
+| $50k-$75k | $1,192 | $822 | PE 31% lower |
+| $100k-$150k | $3,258 | $3,292 | Similar |
+| Over $1M | $78,228 | **$139,623** | PE **78% higher** |
+
+## Total Baseline Revenue Comparison
+
+| Bracket | RFA Revenue | PE Revenue | Difference |
+|---------|-------------|------------|------------|
+| $0-$100k | $1.24B | $0.74B | -$0.50B |
+| $100k-$1M | $4.22B | $2.61B | -$1.61B |
+| Over $1M | $0.93B | **$3.17B** | **+$2.23B** |
+| **Total** | **$6.40B** | **$6.52B** | +$0.12B (+1.8%) |
+
+**Critical insight:** Total baseline revenue is similar, but PE derives **48%** of SC income tax from millionaires vs RFA's **15%**.
+
 ## Likely Causes
 
 ### 1. Implementation Details (from PR #7494)
@@ -119,3 +168,20 @@ The $159M difference primarily comes from:
 4. **+$60M**: Various other bracket differences
 
 **Bottom line**: PolicyEngine's model shows the SCIAD phase-out creating more tax increases for upper-middle income taxpayers than RFA estimates, which more than offsets the tax cuts elsewhere.
+
+## Conclusion
+
+The $159M difference is **not primarily a calculation issue** but stems from:
+
+1. **Different income distributions**: PE's CPS-based data has far more millionaires (22.7k vs 12k) paying much higher average taxes ($140k vs $78k)
+
+2. **Different return counts**: PE undercounts middle-income filers ($50k-$300k) by 40-50%
+
+3. **Millionaire impact drives divergence**: H.4216 gives large tax cuts to millionaires. With PE having 2x more millionaires paying 2x higher taxes, the reform's impact on this group dominates.
+
+### Recommendation
+
+To align with RFA, PolicyEngine would need to:
+- Recalibrate SC state weights to match actual tax return distributions
+- Validate millionaire counts and income levels against IRS SOI data
+- Investigate why baseline tax for millionaires is so much higher than RFA

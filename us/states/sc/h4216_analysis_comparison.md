@@ -2,7 +2,15 @@
 
 ## Executive Summary
 
-The $159M difference between PolicyEngine (+$39.8M) and RFA (-$119.1M) is driven by **fundamentally different income distributions** in the underlying data, not calculation errors.
+**UPDATE (Feb 2025):** PR #7514 fixed a bug where `sc_additions` (QBI and SALT addbacks) were incorrectly applied under H.4216. Since H.4216 starts from AGI (before federal deductions), addbacks are inappropriate. With this fix, PolicyEngine estimates approximately **-$110.9M** vs RFA's **-$119.1M** (~93% accuracy).
+
+---
+
+### Original Analysis (Pre-Fix)
+
+The original $159M difference between PolicyEngine (+$39.8M) and RFA (-$119.1M) was driven by:
+1. **Bug**: `sc_additions` were being applied when starting from AGI (fixed in PR #7514)
+2. **Different income distributions** in the underlying data
 
 ## Summary
 

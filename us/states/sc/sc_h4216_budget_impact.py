@@ -8,7 +8,7 @@ from policyengine_us.reforms.states.sc.h4216.sc_h4216 import create_sc_h4216
 from policyengine_core.reforms import Reform
 import numpy as np
 
-SC_DATASET = "hf://policyengine/policyengine-us-data/staging/states/SC.h5"
+SC_DATASET = "hf://policyengine/test/mar/SC.h5"
 TAX_YEAR = 2026
 
 def create_h4216_reform():
@@ -58,9 +58,9 @@ print("="*60)
 print(f"\nBaseline SC Income Tax Revenue: ${baseline_revenue:,.0f}")
 print(f"Reform SC Income Tax Revenue:   ${reform_revenue:,.0f}")
 print(f"\n>>> BUDGET IMPACT: ${budget_impact:,.0f} <<<")
-print(f"\nRFA Estimate: -$119,100,000")
-print(f"Difference from RFA: ${budget_impact - (-119100000):,.0f}")
-print(f"Accuracy: {(1 - abs(budget_impact - (-119100000)) / 119100000) * 100:.1f}%")
+print(f"\nRFA Estimate (5.21%): -$309,000,000")
+print(f"Difference from RFA: ${budget_impact - (-309000000):,.0f}")
+print(f"Accuracy: {(1 - abs(budget_impact - (-309000000)) / 309000000) * 100:.1f}%")
 print("\n" + "-"*60)
 print(f"Tax units with DECREASE: {pct_decrease:.1f}%")
 print(f"Tax units with INCREASE: {pct_increase:.1f}%")

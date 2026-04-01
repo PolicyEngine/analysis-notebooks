@@ -2,14 +2,15 @@
 
 ## Executive Summary
 
-This analysis compares PolicyEngine estimates against the SC Revenue and Fiscal Affairs (RFA) fiscal notes for H.4216, a tax reform bill that restructures South Carolina's income tax system.
+This analysis compares PolicyEngine estimates against the SC Revenue and Fiscal Affairs (RFA) fiscal note for H.4216, a tax reform bill that restructures South Carolina's income tax system.
 
-### Budget Impact Summary
+### Budget Impact Summary (5.21% Top Rate)
 
-| Rate Option | RFA Estimate | State Dataset | Test Dataset | State Accuracy | Test Accuracy |
-|-------------|--------------|---------------|--------------|----------------|---------------|
-| **5.21%** | **-$308.7M** | -$393.0M | -$212.0M | 73% (27% over) | 69% (31% under) |
-| **5.39%** | **-$119.1M** | -$198.2M | -$92.7M | 34% (66% over) | 78% (22% under) |
+| Source | Budget Impact | vs RFA | Accuracy |
+|--------|---------------|--------|----------|
+| **RFA** | **-$308.7M** | - | - |
+| State Dataset | -$393.0M | -$84.3M | 73% (27% over) |
+| Test Dataset | -$212.0M | +$96.7M | 69% (31% under) |
 
 **Key Finding:** The policy encoding is correct. All discrepancies stem from dataset characteristics, primarily the distribution of millionaire tax filers.
 
@@ -23,9 +24,9 @@ This analysis compares PolicyEngine estimates against the SC Revenue and Fiscal 
 - 6% on income over $18,230
 - Taxable income = Federal Taxable Income + SC Additions - SC Subtractions
 
-### H.4216 Reform
+### H.4216 Reform (5.21% Top Rate)
 - 1.99% on income up to $30,000
-- 5.21% (bill default) or 5.39% (RFA version) on income over $30,000
+- 5.21% on income over $30,000
 - Taxable income = AGI - SC Subtractions - SCIAD (new deduction)
 - No federal standard/itemized deductions in base
 
@@ -58,9 +59,7 @@ This analysis compares PolicyEngine estimates against the SC Revenue and Fiscal 
 
 ---
 
-## 5.21% Rate Analysis
-
-### Budget Impact by Income Bracket
+## Budget Impact by Income Bracket (5.21% Rate)
 
 | AGI Range | RFA | State | Test | State vs RFA | Test vs RFA |
 |-----------|-----|-------|------|--------------|-------------|
@@ -80,7 +79,7 @@ This analysis compares PolicyEngine estimates against the SC Revenue and Fiscal 
 | **Over $1M** | **-$45.0M** | **-$332.9M** | **-$142.0M** | **-$287.9M** | **-$97.0M** |
 | **TOTAL** | **-$308.7M** | **-$393.0M** | **-$212.0M** | **-$84.3M** | **+$96.7M** |
 
-### Winner/Loser Distribution (5.21%)
+### Winner/Loser Distribution
 
 | Metric | RFA | State | Test |
 |--------|-----|-------|------|
@@ -89,40 +88,6 @@ This analysis compares PolicyEngine estimates against the SC Revenue and Fiscal 
 | **No Change** | 34.6% | 56.0% | 64.2% |
 | **Total Decrease $** | -$522.1M | -$545.9M | -$345.7M |
 | **Total Increase $** | +$213.4M | +$152.9M | +$133.7M |
-
----
-
-## 5.39% Rate Analysis
-
-### Budget Impact by Income Bracket
-
-| AGI Range | RFA | State | Test | State vs RFA | Test vs RFA |
-|-----------|-----|-------|------|--------------|-------------|
-| $0* | -$571K | $0 | $0 | +$571K | +$571K |
-| $1-$10K | +$1.7M | $0 | $0 | -$1.7M | -$1.7M |
-| $10K-$20K | +$2.9M | +$2.7M | +$0.8M | -$0.2M | -$2.1M |
-| $20K-$30K | +$0.8M | +$9.3M | +$2.8M | +$8.5M | +$2.0M |
-| $30K-$40K | -$19.4M | -$5.4M | -$2.1M | +$14.0M | +$17.3M |
-| $40K-$50K | -$42.0M | -$27.8M | -$12.8M | +$14.2M | +$29.2M |
-| $50K-$75K | -$82.1M | -$26.5M | -$28.6M | +$55.6M | +$53.5M |
-| $75K-$100K | -$36.5M | -$19.1M | -$26.8M | +$17.4M | +$9.7M |
-| $100K-$150K | +$3.1M | +$37.2M | +$49.6M | +$34.1M | +$46.5M |
-| $150K-$200K | +$50.9M | +$42.0M | +$32.6M | -$8.9M | -$18.3M |
-| $200K-$300K | +$36.7M | +$26.7M | +$28.2M | -$10.0M | -$8.5M |
-| $300K-$500K | -$4.6M | +$4.3M | -$8.9M | +$8.9M | -$4.3M |
-| $500K-$1M | -$16.2M | -$6.4M | -$21.9M | +$9.8M | -$5.7M |
-| **Over $1M** | **-$13.8M** | **-$235.2M** | **-$105.6M** | **-$221.4M** | **-$91.8M** |
-| **TOTAL** | **-$119.1M** | **-$198.2M** | **-$92.7M** | **-$79.1M** | **+$26.4M** |
-
-### Winner/Loser Distribution (5.39%)
-
-| Metric | RFA | State | Test |
-|--------|-----|-------|------|
-| **Tax Decrease** | 38.7% | 21.5% | 18.3% |
-| **Tax Increase** | 26.7% | 22.5% | 17.6% |
-| **No Change** | 34.6% | 56.0% | 64.1% |
-| **Total Decrease $** | -$388.7M | -$396.2M | -$259.2M |
-| **Total Increase $** | +$269.6M | +$197.9M | +$166.5M |
 
 ---
 
@@ -135,11 +100,10 @@ The millionaire bracket (>$1M AGI) is the dominant driver of discrepancies:
 | Metric | RFA | State | Test |
 |--------|-----|-------|------|
 | **Millionaire Count** | 11,936 | 22,686 (+90%) | 6,993 (-41%) |
-| **5.21% Impact** | -$45.0M | -$332.9M | -$142.0M |
-| **5.39% Impact** | -$13.8M | -$235.2M | -$105.6M |
-| **Avg Change (5.21%)** | -$4,031 | -$14,672 | -$20,306 |
+| **Budget Impact** | -$45.0M | -$332.9M | -$142.0M |
+| **Avg Tax Change** | -$4,031 | -$14,672 | -$20,306 |
 
-**State Dataset:** Has nearly **double** the millionaires RFA reports. This alone accounts for ~$288M of the $84M overestimate at 5.21%.
+**State Dataset:** Has nearly **double** the millionaires RFA reports. This alone accounts for ~$288M of the $84M overestimate.
 
 **Test Dataset:** Has 41% fewer millionaires but an extreme outlier ($418.7M AGI) that skews averages significantly.
 
@@ -160,8 +124,7 @@ PE shows tax **increases** where RFA shows mixed results:
 
 | Bracket Range | RFA Impact | State Impact | Test Impact |
 |---------------|------------|--------------|-------------|
-| $100K-$300K (5.21%) | -$22.1M | +$54.9M | +$62.7M |
-| $100K-$300K (5.39%) | +$90.7M | +$105.9M | +$110.4M |
+| $100K-$300K | -$22.1M | +$54.9M | +$62.7M |
 
 This suggests SCIAD phase-out behavior may differ or income distributions within brackets vary.
 
@@ -179,14 +142,14 @@ PE datasets have significantly more zero/low-income tax units. These units have 
 ## Summary of Dataset Characteristics
 
 ### State (Production) Dataset
-- **Overestimates** tax cuts at both rates
+- **Overestimates** tax cuts
 - Has 90% more millionaires than RFA
 - Higher average incomes ($104K vs $74K Test)
 - Baseline revenue matches RFA (~$6.5B)
 - More total returns than RFA (+6.5%)
 
 ### Test Dataset
-- **Underestimates** tax cuts at both rates
+- **Underestimates** tax cuts
 - Has 41% fewer millionaires than RFA
 - Lower average incomes ($74K)
 - Baseline revenue 37% below RFA ($4.0B vs $6.4B)
@@ -216,10 +179,12 @@ PE datasets have significantly more zero/low-income tax units. These units have 
 4. Note millionaire bracket as primary source of uncertainty
 
 ### For Reporting
-| Rate | Conservative | Central | Aggressive |
-|------|--------------|---------|------------|
-| 5.21% | -$212M (Test) | -$309M (RFA) | -$393M (State) |
-| 5.39% | -$93M (Test) | -$119M (RFA) | -$198M (State) |
+
+| Estimate Type | Value | Source |
+|---------------|-------|--------|
+| Conservative | -$212M | Test Dataset |
+| Central | -$309M | RFA |
+| Aggressive | -$393M | State Dataset |
 
 ---
 
@@ -233,22 +198,14 @@ sc/
 ├── sc_test_dataset_summary_weighted.csv # Test dataset summary stats
 └── h4216_analysis/
     ├── h4216_analysis_comparison.md    # This file
-    ├── 5.21_rate/
-    │   ├── rfa_h4216_5.21_analysis.csv # RFA fiscal note data
-    │   ├── state/
-    │   │   ├── pe_h4216_5.21_state_analysis.csv
-    │   │   └── sc_h4216_5.21_state_analysis.ipynb
-    │   └── test/
-    │       ├── pe_h4216_5.21_analysis.csv
-    │       └── sc_h4216_5.21_analysis.ipynb
-    └── 5.39_rate/
-        ├── rfa_h4216_analysis.csv      # RFA fiscal note data
+    └── 5.21_rate/
+        ├── rfa_h4216_5.21_analysis.csv # RFA fiscal note data
         ├── state/
-        │   ├── pe_h4216_5.39_state_analysis.csv
-        │   └── sc_h4216_5.39_state_analysis.ipynb
+        │   ├── pe_h4216_5.21_state_analysis.csv
+        │   └── sc_h4216_5.21_state_analysis.ipynb
         └── test/
-            ├── pe_h4216_test_analysis.csv
-            └── sc_h4216_test_analysis.ipynb
+            ├── pe_h4216_5.21_analysis.csv
+            └── sc_h4216_5.21_analysis.ipynb
 ```
 
 ---
@@ -260,7 +217,7 @@ sc/
 Fixed bug where `sc_additions` (QBI and SALT addbacks) were incorrectly applied under H.4216. Since H.4216 starts from AGI (before federal deductions), addbacks are inappropriate.
 
 - **Before fix:** +$39.8M (wrong direction - showed revenue increase)
-- **After fix:** -$93M to -$393M depending on dataset and rate
+- **After fix:** -$212M to -$393M depending on dataset
 
 ### Policy Parameters Location
 ```
@@ -273,7 +230,7 @@ from policyengine_us import Microsimulation
 from policyengine_us.reforms.states.sc.h4216.sc_h4216 import create_sc_h4216
 from policyengine_core.reforms import Reform
 
-# Create reform with specific top rate
+# Create reform with 5.21% top rate
 param_reform = Reform.from_dict({
     "gov.contrib.states.sc.h4216.in_effect": {"2026-01-01.2100-12-31": True},
     "gov.contrib.states.sc.h4216.rates[1].rate": {"2026-01-01.2100-12-31": 0.0521}
@@ -284,3 +241,6 @@ reform = (base_reform, param_reform)
 
 sim = Microsimulation(dataset="hf://policyengine/test/mar/SC.h5", reform=reform)
 ```
+
+### RFA Fiscal Note
+- [H.4216 Fiscal Note (5.21% Rate)](https://www.scstatehouse.gov/sess126_2025-2026/fiscalimpact/H4216.pdf)

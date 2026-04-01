@@ -9,10 +9,9 @@ This analysis compares PolicyEngine estimates against the SC Revenue and Fiscal 
 | Source | Budget Impact | vs RFA | Accuracy |
 |--------|---------------|--------|----------|
 | **RFA** | **-$308.7M** | - | - |
-| State Dataset | -$393.0M | -$84.3M | 73% (27% over) |
-| Test Dataset | -$212.0M | +$96.7M | 69% (31% under) |
+| Test Dataset | -$370.0M | -$61.3M | 80% (20% over) |
 
-**Key Finding:** The policy encoding is correct. All discrepancies stem from dataset characteristics, primarily the distribution of millionaire tax filers.
+**Key Finding:** The policy encoding is correct. The Test dataset now closely matches RFA with 80% accuracy, slightly overestimating the tax cut.
 
 ---
 
@@ -44,50 +43,48 @@ This analysis compares PolicyEngine estimates against the SC Revenue and Fiscal 
 
 ### Overview
 
-| Metric | RFA | State (Production) | Test |
-|--------|-----|-------------------|------|
-| **Total Returns** | 2,757,573 | 2,935,621 (+6.5%) | 2,705,850 (-1.9%) |
-| **Millionaire Returns** | 11,936 | 22,686 (+90%) | 6,993 (-41%) |
-| **Baseline Revenue** | ~$6.4B | ~$6.5B | ~$4.0B |
-| **Median HH AGI** | N/A | $43,222 | $34,927 |
-| **Avg HH AGI** | N/A | $103,858 | $74,061 |
-| **Max AGI** | N/A | $6.4M | $418.7M |
+| Metric | RFA | Test |
+|--------|-----|------|
+| **Total Returns** | 2,757,573 | 2,914,575 (+5.7%) |
+| **Millionaire Returns** | 11,936 | 20,591 (+73%) |
+| **Median HH AGI** | N/A | $68,193 |
+| **Avg HH AGI** | N/A | $148,865 |
+| **Max AGI** | N/A | $2.38B |
 
-### Dataset Paths
-- **State (Production):** `hf://policyengine/policyengine-us-data/states/SC.h5`
+### Dataset Path
 - **Test:** `hf://policyengine/test/mar/SC.h5`
 
 ---
 
 ## Budget Impact by Income Bracket (5.21% Rate)
 
-| AGI Range | RFA | State | Test | State vs RFA | Test vs RFA |
-|-----------|-----|-------|------|--------------|-------------|
-| $0* | -$671K | $0 | $0 | +$671K | +$671K |
-| $1-$10K | +$1.7M | $0 | $0 | -$1.7M | -$1.7M |
-| $10K-$20K | +$2.9M | +$2.7M | +$0.8M | -$0.2M | -$2.1M |
-| $20K-$30K | +$0.8M | +$9.3M | +$2.8M | +$8.5M | +$2.0M |
-| $30K-$40K | -$19.4M | -$5.4M | -$2.1M | +$14.0M | +$17.3M |
-| $40K-$50K | -$42.6M | -$28.1M | -$12.9M | +$14.5M | +$29.7M |
-| $50K-$75K | -$89.9M | -$30.1M | -$30.5M | +$59.8M | +$59.4M |
-| $75K-$100K | -$48.6M | -$26.5M | -$31.6M | +$22.1M | +$17.0M |
-| $100K-$150K | -$26.1M | +$17.9M | +$28.5M | +$44.0M | +$54.6M |
-| $150K-$200K | +$23.8M | +$26.7M | +$24.6M | +$2.9M | +$0.8M |
-| $200K-$300K | +$4.0M | +$10.3M | +$9.6M | +$6.3M | +$5.6M |
-| $300K-$500K | -$32.1M | -$16.5M | -$26.0M | +$15.6M | +$6.1M |
-| $500K-$1M | -$37.4M | -$20.3M | -$33.2M | +$17.1M | +$4.2M |
-| **Over $1M** | **-$45.0M** | **-$332.9M** | **-$142.0M** | **-$287.9M** | **-$97.0M** |
-| **TOTAL** | **-$308.7M** | **-$393.0M** | **-$212.0M** | **-$84.3M** | **+$96.7M** |
+| AGI Range | RFA | Test | Test vs RFA |
+|-----------|-----|------|-------------|
+| $0* | -$671K | $0 | +$671K |
+| $1-$10K | +$1.7M | $0 | -$1.7M |
+| $10K-$20K | +$2.9M | +$2.2M | -$0.6M |
+| $20K-$30K | +$0.8M | +$6.8M | +$6.0M |
+| $30K-$40K | -$19.4M | -$9.0M | +$10.4M |
+| $40K-$50K | -$42.6M | -$28.5M | +$14.0M |
+| $50K-$75K | -$89.9M | -$53.6M | +$36.4M |
+| $75K-$100K | -$48.6M | -$31.8M | +$16.8M |
+| $100K-$150K | -$26.1M | +$15.0M | +$41.1M |
+| $150K-$200K | +$23.8M | +$29.1M | +$5.3M |
+| $200K-$300K | +$4.0M | +$0.5M | -$3.5M |
+| $300K-$500K | -$32.1M | -$83.0M | -$51.0M |
+| $500K-$1M | -$37.4M | -$87.6M | -$50.2M |
+| **Over $1M** | **-$45.0M** | **-$130.1M** | **-$85.1M** |
+| **TOTAL** | **-$308.7M** | **-$370.0M** | **-$61.3M** |
 
 ### Winner/Loser Distribution
 
-| Metric | RFA | State | Test |
-|--------|-----|-------|------|
-| **Tax Decrease** | 42.8% | 23.8% | 20.6% |
-| **Tax Increase** | 22.6% | 20.1% | 15.2% |
-| **No Change** | 34.6% | 56.0% | 64.2% |
-| **Total Decrease $** | -$522.1M | -$545.9M | -$345.7M |
-| **Total Increase $** | +$213.4M | +$152.9M | +$133.7M |
+| Metric | RFA | Test |
+|--------|-----|------|
+| **Tax Decrease** | 42.8% | 34.6% |
+| **Tax Increase** | 22.6% | 22.3% |
+| **No Change** | 34.6% | 43.1% |
+| **Total Decrease $** | -$522.1M | -$766.7M |
+| **Total Increase $** | +$213.4M | +$396.7M |
 
 ---
 
@@ -97,94 +94,74 @@ This analysis compares PolicyEngine estimates against the SC Revenue and Fiscal 
 
 The millionaire bracket (>$1M AGI) is the dominant driver of discrepancies:
 
-| Metric | RFA | State | Test |
-|--------|-----|-------|------|
-| **Millionaire Count** | 11,936 | 22,686 (+90%) | 6,993 (-41%) |
-| **Budget Impact** | -$45.0M | -$332.9M | -$142.0M |
-| **Avg Tax Change** | -$4,031 | -$14,672 | -$20,306 |
+| Metric | RFA | Test |
+|--------|-----|------|
+| **Millionaire Count** | 11,936 | 20,591 (+73%) |
+| **Budget Impact** | -$45.0M | -$130.1M |
+| **Avg Tax Change** | -$4,031 | -$6,332 |
 
-**State Dataset:** Has nearly **double** the millionaires RFA reports. This alone accounts for ~$288M of the $84M overestimate.
+**Test Dataset:** Has 73% more millionaires than RFA, contributing to larger overall tax cut estimate.
 
-**Test Dataset:** Has 41% fewer millionaires but an extreme outlier ($418.7M AGI) that skews averages significantly.
+### 2. High-Income Brackets ($300K+)
 
-### 2. Middle-Income Brackets ($30K-$100K)
+Test dataset shows significantly larger tax cuts in high-income brackets:
 
-RFA shows much larger tax cuts in middle-income brackets:
+| Bracket Range | RFA Impact | Test Impact | Difference |
+|---------------|------------|-------------|------------|
+| $300K-$500K | -$32.1M | -$83.0M | -$51.0M |
+| $500K-$1M | -$37.4M | -$87.6M | -$50.2M |
+| Over $1M | -$45.0M | -$130.1M | -$85.1M |
+| **Total $300K+** | **-$114.5M** | **-$300.7M** | **-$186.2M** |
 
-| Bracket Range | RFA Impact | State Impact | Test Impact |
-|---------------|------------|--------------|-------------|
-| $30K-$100K combined | -$200.5M | -$90.1M | -$77.1M |
-| Difference vs RFA | - | +$110.4M | +$123.4M |
+The $300K+ brackets account for most of the overestimate.
 
-Both PE datasets underweight middle-income filers relative to RFA.
+### 3. Middle-Income Brackets ($30K-$100K)
 
-### 3. Upper-Middle Income ($100K-$300K)
+| Bracket Range | RFA Impact | Test Impact | Difference |
+|---------------|------------|-------------|------------|
+| $30K-$100K combined | -$200.5M | -$122.9M | +$77.6M |
 
-PE shows tax **increases** where RFA shows mixed results:
+Test dataset underweights middle-income tax cuts, partially offsetting the high-income overestimate.
 
-| Bracket Range | RFA Impact | State Impact | Test Impact |
-|---------------|------------|--------------|-------------|
-| $100K-$300K | -$22.1M | +$54.9M | +$62.7M |
+### 4. Upper-Middle Income ($100K-$300K)
 
-This suggests SCIAD phase-out behavior may differ or income distributions within brackets vary.
+| Bracket Range | RFA Impact | Test Impact | Difference |
+|---------------|------------|-------------|------------|
+| $100K-$300K | -$22.1M | +$44.6M | +$66.7M |
 
-### 4. Low-Income Brackets ($0-$30K)
-
-| Bracket | RFA Returns | State Returns | Test Returns |
-|---------|-------------|---------------|--------------|
-| $0* | 78,854 (2.9%) | 619,010 (21.1%) | 727,881 (26.9%) |
-| $1-$10K | 286,253 (10.4%) | 502,276 (17.1%) | 498,186 (18.4%) |
-
-PE datasets have significantly more zero/low-income tax units. These units have zero tax liability, so they don't affect budget impact but dilute the "% with tax change" statistics.
+Test shows tax increases in this range where RFA shows cuts, suggesting different SCIAD phase-out distributions.
 
 ---
 
 ## Summary of Dataset Characteristics
 
-### State (Production) Dataset
-- **Overestimates** tax cuts
-- Has 90% more millionaires than RFA
-- Higher average incomes ($104K vs $74K Test)
-- Baseline revenue matches RFA (~$6.5B)
-- More total returns than RFA (+6.5%)
-
 ### Test Dataset
-- **Underestimates** tax cuts
-- Has 41% fewer millionaires than RFA
-- Lower average incomes ($74K)
-- Baseline revenue 37% below RFA ($4.0B vs $6.4B)
-- Return count close to RFA (-1.9%)
-- Has extreme outlier ($418.7M AGI)
+- **Slightly overestimates** tax cuts (80% accuracy)
+- Has 73% more millionaires than RFA (20,591 vs 11,936)
+- Higher average incomes ($149K avg HH AGI)
+- Return count close to RFA (+5.7%)
+- High-income brackets drive the overestimate
 
-### Ideal Dataset Would Have
-- RFA's millionaire count (~11,936)
-- RFA's return count (~2.76M)
-- RFA's baseline revenue (~$6.4B)
-- Middle-income weighting matching SC tax filer data
+### Key Differences from RFA
+- More returns in $300K+ brackets
+- Larger average tax cuts for high earners
+- Fewer middle-income filers seeing tax cuts
 
 ---
 
 ## Recommendations
 
 ### For Data Team
-1. Investigate millionaire overcount in State dataset (22,686 vs 11,936 RFA)
-2. Investigate baseline revenue undercount in Test dataset ($4.0B vs $6.4B)
-3. Recalibrate weights to match SC DOR filer distribution by income bracket
-4. Validate against IRS SOI data for SC
-
-### For Analysis
-1. Report range of estimates from both datasets
-2. Use State for directional analysis (correct baseline revenue magnitude)
-3. Use Test for return count validation (closer to RFA)
-4. Note millionaire bracket as primary source of uncertainty
+1. Investigate millionaire overcount (20,591 vs 11,936 RFA)
+2. Validate $300K-$1M bracket weighting
+3. Compare income distributions within brackets to RFA
 
 ### For Reporting
 
 | Estimate Type | Value | Source |
 |---------------|-------|--------|
-| Conservative | -$212M | Test Dataset |
 | Central | -$309M | RFA |
-| Aggressive | -$393M | State Dataset |
+| PE Estimate | -$370M | Test Dataset (80% accuracy) |
 
 ---
 
@@ -200,9 +177,6 @@ sc/
     ├── h4216_analysis_comparison.md    # This file
     └── 5.21_rate/
         ├── rfa_h4216_5.21_analysis.csv # RFA fiscal note data
-        ├── state/
-        │   ├── pe_h4216_5.21_state_analysis.csv
-        │   └── sc_h4216_5.21_state_analysis.ipynb
         └── test/
             ├── pe_h4216_5.21_analysis.csv
             └── sc_h4216_5.21_analysis.ipynb
@@ -217,7 +191,7 @@ sc/
 Fixed bug where `sc_additions` (QBI and SALT addbacks) were incorrectly applied under H.4216. Since H.4216 starts from AGI (before federal deductions), addbacks are inappropriate.
 
 - **Before fix:** +$39.8M (wrong direction - showed revenue increase)
-- **After fix:** -$212M to -$393M depending on dataset
+- **After fix:** -$370M (Test dataset)
 
 ### Policy Parameters Location
 ```

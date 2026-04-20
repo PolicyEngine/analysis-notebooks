@@ -25,7 +25,7 @@ from policyengine_us import Microsimulation
 CPS_2023 = Path(
     "/Users/pavelmakarchuk/policyengine-us-data/policyengine_us_data/storage/cps_2023.h5"
 )
-ENHANCED_CPS_2024 = "enhanced_cps_2024"
+ENHANCED_CPS_2024 = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.46.0"
 
 # AGI bins. Keep negative AGI separate, and treat exactly $0 as part of
 # the $0-$10k bucket rather than the negative bucket.

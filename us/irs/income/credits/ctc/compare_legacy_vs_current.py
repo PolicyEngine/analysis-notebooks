@@ -23,9 +23,7 @@ import argparse
 import json
 from pathlib import Path
 
-import numpy as np
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from policyengine_us import Microsimulation
 from policyengine_core.reforms import Reform
 

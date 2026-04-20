@@ -4,6 +4,7 @@ Number of children by AGI bin: CPS 2023 vs Enhanced CPS 2024.
 Run:
     uv run --python 3.11 \
       --with policyengine-us \
+      --with plotly \
       python us/irs/income/credits/ctc/children_by_agi_bin.py
 
 Outputs a table and a grouped bar chart comparing the two datasets.

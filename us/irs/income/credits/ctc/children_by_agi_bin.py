@@ -158,9 +158,14 @@ def main() -> None:
     print(f"\nTotal children CPS 2023:         {comparison['children_cps23'].sum():,.0f}")
     print(f"Total children Enhanced CPS 2024: {comparison['children_ecps24'].sum():,.0f}")
 
-    # Save CSV
+    # Save CSV with comma-formatted numbers for readability
     csv_path = outdir / "children_by_agi_bin.csv"
-    comparison.to_csv(csv_path, index=False)
+    out = comparison.copy()
+    out["children_cps23"] = out["children_cps23"].apply(lambda x: f"{x:,.0f}")
+    out["children_ecps24"] = out["children_ecps24"].apply(lambda x: f"{x:,.0f}")
+    out["difference"] = out["difference"].apply(lambda x: f"{x:+,.0f}")
+    out["pct_diff"] = out["pct_diff"].apply(lambda x: f"{x:+.1f}%")
+    out.to_csv(csv_path, index=False)
     print(f"\nCSV saved to: {csv_path}")
 
     # Grouped bar chart

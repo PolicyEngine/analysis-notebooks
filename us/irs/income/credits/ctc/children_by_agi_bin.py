@@ -161,6 +161,15 @@ def main() -> None:
     # Save as tab-separated with comma-formatted numbers
     csv_path = outdir / "children_by_agi_bin.tsv"
     out = comparison.copy()
+    # Add totals row
+    totals = pd.DataFrame([{
+        "agi_bin": "Total",
+        "children_cps23": comparison["children_cps23"].sum(),
+        "children_ecps24": comparison["children_ecps24"].sum(),
+        "difference": comparison["difference"].sum(),
+        "pct_diff": (comparison["children_ecps24"].sum() / comparison["children_cps23"].sum() - 1) * 100,
+    }])
+    out = pd.concat([out, totals], ignore_index=True)
     out["children_cps23"] = out["children_cps23"].apply(lambda x: f"{x:,.0f}")
     out["children_ecps24"] = out["children_ecps24"].apply(lambda x: f"{x:,.0f}")
     out["difference"] = out["difference"].apply(lambda x: f"{x:+,.0f}")

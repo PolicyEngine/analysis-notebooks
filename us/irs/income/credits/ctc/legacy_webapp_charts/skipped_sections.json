@@ -1,0 +1,7 @@
+{
+  "cliff_impact": true,
+  "constituency_impact": true,
+  "detailed_budget": true,
+  "intra_wealth_decile": true,
+  "wealth_decile": true
+}

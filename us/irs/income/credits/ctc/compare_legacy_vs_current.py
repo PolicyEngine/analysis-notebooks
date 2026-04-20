@@ -31,7 +31,7 @@ from policyengine_core.reforms import Reform
 CPS_2023 = Path(
     "/Users/pavelmakarchuk/policyengine-us-data/policyengine_us_data/storage/cps_2023.h5"
 )
-ENHANCED_CPS_2024 = "enhanced_cps_2024"
+ENHANCED_CPS_2024 = "hf://policyengine/policyengine-us-data/enhanced_cps_2024.h5@1.46.0"
 LEGACY_PAYLOAD = Path(
     "us/irs/income/credits/ctc/legacy_webapp_charts/impact_payload.json"
 )

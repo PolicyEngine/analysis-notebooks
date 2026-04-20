@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Legacy Webapp Charts</title>
+    <style>
+      :root {
+        --blue: #2c6496;
+        --blue-light: #d8e6f3;
+        --gray-100: #f2f2f2;
+        --gray-500: #616161;
+        --gray-400: #bdbdbd;
+        --ink: #0c1a27;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Roboto Serif", Georgia, serif;
+        color: var(--ink);
+        background: linear-gradient(180deg, #f7fafd 0%, #ffffff 100%);
+      }
+
+      main {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 32px 20px 60px;
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: 2rem;
+      }
+
+      .intro {
+        margin: 0 0 28px;
+        padding: 16px 18px;
+        background: white;
+        border-left: 4px solid var(--blue);
+        box-shadow: 0 8px 24px rgba(12, 26, 39, 0.06);
+      }
+
+      .toc {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 10px;
+        margin: 0 0 28px;
+      }
+
+      .toc a {
+        display: block;
+        padding: 10px 12px;
+        color: var(--ink);
+        text-decoration: none;
+        background: var(--gray-100);
+        border: 1px solid var(--blue-light);
+      }
+
+      .toc a:hover {
+        background: var(--blue-light);
+      }
+
+      section {
+        margin: 0 0 28px;
+        padding: 16px;
+        background: white;
+        box-shadow: 0 8px 24px rgba(12, 26, 39, 0.06);
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 1.15rem;
+      }
+
+      iframe {
+        width: 100%;
+        height: 720px;
+        border: 1px solid var(--gray-400);
+        background: white;
+      }
+
+      .small iframe {
+        height: 620px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Legacy Webapp Charts</h1>
+      <p class="intro">
+        Closest reproducible legacy web-app output for the November 2025 path:
+        old macro stack, <code>region=us</code>, no
+        <code>dataset=enhanced_cps</code>, using <code>cps_2023.h5</code>.
+      </p>
+
+      <nav class="toc">
+        <a href="#budget">Budgetary impact</a>
+        <a href="#dist-avg">Distributional average</a>
+        <a href="#dist-rel">Distributional relative</a>
+        <a href="#winners">Winners and losers</a>
+        <a href="#poverty-age">Poverty by age</a>
+        <a href="#deep-age">Deep poverty by age</a>
+        <a href="#poverty-gender">Poverty by gender</a>
+        <a href="#deep-gender">Deep poverty by gender</a>
+        <a href="#poverty-race">Poverty by race</a>
+        <a href="#inequality">Inequality</a>
+      </nav>
+
+      <section id="budget">
+        <h2>Budgetary Impact</h2>
+        <iframe src="budgetary_impact_overall.html" title="Budgetary impact"></iframe>
+      </section>
+
+      <section id="dist-avg" class="small">
+        <h2>Distributional Impact By Income Decile: Average</h2>
+        <iframe
+          src="distributional_income_decile_average.html"
+          title="Distributional impact average"
+        ></iframe>
+      </section>
+
+      <section id="dist-rel" class="small">
+        <h2>Distributional Impact By Income Decile: Relative</h2>
+        <iframe
+          src="distributional_income_decile_relative.html"
+          title="Distributional impact relative"
+        ></iframe>
+      </section>
+
+      <section id="winners">
+        <h2>Winners And Losers By Income Decile</h2>
+        <iframe
+          src="winners_losers_income_decile.html"
+          title="Winners and losers"
+        ></iframe>
+      </section>
+
+      <section id="poverty-age" class="small">
+        <h2>Poverty Impact By Age</h2>
+        <iframe src="poverty_by_age.html" title="Poverty by age"></iframe>
+      </section>
+
+      <section id="deep-age" class="small">
+        <h2>Deep Poverty Impact By Age</h2>
+        <iframe src="deep_poverty_by_age.html" title="Deep poverty by age"></iframe>
+      </section>
+
+      <section id="poverty-gender" class="small">
+        <h2>Poverty Impact By Gender</h2>
+        <iframe src="poverty_by_gender.html" title="Poverty by gender"></iframe>
+      </section>
+
+      <section id="deep-gender" class="small">
+        <h2>Deep Poverty Impact By Gender</h2>
+        <iframe
+          src="deep_poverty_by_gender.html"
+          title="Deep poverty by gender"
+        ></iframe>
+      </section>
+
+      <section id="poverty-race" class="small">
+        <h2>Poverty Impact By Race And Ethnicity</h2>
+        <iframe src="poverty_by_race.html" title="Poverty by race"></iframe>
+      </section>
+
+      <section id="inequality" class="small">
+        <h2>Inequality Impact</h2>
+        <iframe src="inequality_impact.html" title="Inequality impact"></iframe>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,307 @@
+state,eitc_phase_status,weighted_households,pct_of_state,avg_federal_eitc,avg_state_eitc
+AK,Ineligible,103108.586,50.1,0.0,0.0
+AK,No earned income,13868.578,6.7,0.0,0.0
+AK,Pre-phase-in,3593.0698,1.7,515.6275,0.0
+AK,Full amount,0.26411486,0.0,632.0,0.0
+AK,Partially phased out,1670.441,0.8,626.76306,0.0
+AK,Fully phased out,83537.39,40.6,0.0,0.0
+AL,Ineligible,807295.2,56.8,0.0,0.0
+AL,No earned income,108302.58,7.6,0.0,0.0
+AL,Pre-phase-in,3393.997,0.2,354.8626,0.0
+AL,Full amount,579.7901,0.0,632.00006,0.0
+AL,Partially phased out,10719.72,0.8,448.05634,0.0
+AL,Fully phased out,491831.62,34.6,0.0,0.0
+AR,Ineligible,365523.75,53.5,0.0,0.0
+AR,No earned income,42188.39,6.2,0.0,0.0
+AR,Pre-phase-in,2328.134,0.3,453.59937,0.0
+AR,Full amount,225.77205,0.0,632.00006,0.0
+AR,Partially phased out,5891.0483,0.9,390.64108,0.0
+AR,Fully phased out,267684.84,39.1,0.0,0.0
+AZ,Ineligible,1030924.9,54.1,0.0,0.0
+AZ,No earned income,118057.78,6.2,0.0,0.0
+AZ,Pre-phase-in,16732.682,0.9,489.90863,0.0
+AZ,Full amount,813.97723,0.0,631.99994,0.0
+AZ,Partially phased out,14077.297,0.7,468.2071,0.0
+AZ,Fully phased out,725015.44,38.0,0.0,0.0
+CA,Ineligible,6262195.5,53.6,0.0,0.0
+CA,No earned income,752618.44,6.4,0.0,0.0
+CA,Pre-phase-in,169192.22,1.4,464.49402,220.66093
+CA,Full amount,6347.9746,0.1,632.0,214.94342
+CA,Partially phased out,129554.266,1.1,338.052,165.84186
+CA,Fully phased out,4356847.0,37.3,0.0,0.0
+CO,Ineligible,845305.4,52.7,0.0,0.0
+CO,No earned income,91801.25,5.7,0.0,0.0
+CO,Pre-phase-in,18100.334,1.1,495.57047,247.78523
+CO,Full amount,607.85394,0.0,632.0,316.0
+CO,Partially phased out,14817.716,0.9,390.9891,195.49455
+CO,Fully phased out,632325.06,39.4,0.0,0.0
+CT,Ineligible,610852.06,54.5,0.0,0.0
+CT,No earned income,67626.59,6.0,0.0,0.0
+CT,Pre-phase-in,16373.769,1.5,484.28445,193.71379
+CT,Full amount,767.30066,0.1,631.99994,252.79996
+CT,Partially phased out,9624.257,0.9,373.07062,149.22826
+CT,Fully phased out,414601.4,37.0,0.0,0.0
+DC,Ineligible,150828.56,61.0,0.0,0.0
+DC,No earned income,16620.902,6.7,0.0,0.0
+DC,Pre-phase-in,2963.3503,1.2,494.57617,494.57617
+DC,Full amount,184.6686,0.1,632.0,632.0
+DC,Partially phased out,2235.9175,0.9,368.30032,631.9979
+DC,Fully phased out,74248.8,30.1,0.0,0.0
+DE,Ineligible,155854.33,58.8,0.0,0.0
+DE,No earned income,16751.723,6.3,0.0,0.0
+DE,Pre-phase-in,1639.9989,0.6,510.83517,22.987583
+DE,Full amount,147.16574,0.1,632.0001,28.440006
+DE,Partially phased out,2595.5366,1.0,368.74863,32.519676
+DE,Fully phased out,88244.69,33.3,0.0,0.0
+FL,Ineligible,3838385.8,56.2,0.0,0.0
+FL,No earned income,433466.7,6.3,0.0,0.0
+FL,Pre-phase-in,75472.13,1.1,421.00208,0.0
+FL,Full amount,162.57959,0.0,632.00006,0.0
+FL,Partially phased out,46630.918,0.7,390.32828,0.0
+FL,Fully phased out,2434553.2,35.7,0.0,0.0
+GA,Ineligible,1553378.5,54.2,0.0,0.0
+GA,No earned income,188064.14,6.6,0.0,0.0
+GA,Pre-phase-in,19097.996,0.7,465.8739,0.0
+GA,Full amount,737.23004,0.0,632.00006,0.0
+GA,Partially phased out,31459.322,1.1,345.65503,0.0
+GA,Fully phased out,1075171.9,37.5,0.0,0.0
+HI,Ineligible,221502.23,55.2,0.0,0.0
+HI,No earned income,23955.72,6.0,0.0,0.0
+HI,Pre-phase-in,5178.715,1.3,494.72058,197.88823
+HI,Full amount,257.19754,0.1,632.0,252.79999
+HI,Partially phased out,2631.8538,0.7,420.5297,168.21193
+HI,Fully phased out,147704.7,36.8,0.0,0.0
+IA,Ineligible,409482.44,49.0,0.0,0.0
+IA,No earned income,46174.527,5.5,0.0,0.0
+IA,Pre-phase-in,15106.781,1.8,501.14404,75.171616
+IA,Full amount,170.26959,0.0,632.00006,94.80001
+IA,Partially phased out,4263.8096,0.5,567.887,85.18305
+IA,Fully phased out,359791.94,43.1,0.0,0.0
+ID,Ineligible,213084.25,50.7,0.0,0.0
+ID,No earned income,20815.344,4.9,0.0,0.0
+ID,Pre-phase-in,4232.7524,1.0,488.3741,0.0
+ID,Full amount,29.52343,0.0,631.99994,0.0
+ID,Partially phased out,3326.125,0.8,406.90085,0.0
+ID,Fully phased out,179148.03,42.6,0.0,0.0
+IL,Ineligible,2202561.0,54.2,0.0,0.0
+IL,No earned income,286114.75,7.0,0.0,0.0
+IL,Pre-phase-in,56196.797,1.4,500.49594,100.099174
+IL,Full amount,1363.2563,0.0,632.0,126.399994
+IL,Partially phased out,36035.117,0.9,392.3396,78.46792
+IL,Fully phased out,1479562.0,36.4,0.0,0.0
+IN,Ineligible,843974.44,49.4,0.0,0.0
+IN,No earned income,96952.6,5.7,0.0,0.0
+IN,Pre-phase-in,15157.452,0.9,480.99515,48.099514
+IN,Full amount,511.06155,0.0,632.0,63.2
+IN,Partially phased out,10308.328,0.6,496.45984,49.64599
+IN,Fully phased out,740379.7,43.4,0.0,0.0
+KS,Ineligible,358161.7,48.0,0.0,0.0
+KS,No earned income,40405.902,5.4,0.0,0.0
+KS,Pre-phase-in,4779.117,0.6,466.8283,79.36082
+KS,Full amount,216.41118,0.0,631.99994,107.44002
+KS,Partially phased out,7120.175,1.0,342.1813,58.17083
+KS,Fully phased out,335808.38,45.0,0.0,0.0
+KY,Ineligible,602998.1,53.7,0.0,0.0
+KY,No earned income,70266.05,6.3,0.0,0.0
+KY,Pre-phase-in,13095.383,1.2,494.37393,0.0
+KY,Full amount,217.51695,0.0,632.0,0.0
+KY,Partially phased out,9609.8,0.9,443.0421,0.0
+KY,Fully phased out,426730.9,38.0,0.0,0.0
+LA,Ineligible,704199.25,56.1,0.0,0.0
+LA,No earned income,105432.836,8.4,0.0,0.0
+LA,Pre-phase-in,10768.384,0.9,475.93637,23.796818
+LA,Full amount,408.5082,0.0,631.99994,31.6
+LA,Partially phased out,9441.553,0.8,432.26416,21.613207
+LA,Fully phased out,424784.6,33.8,0.0,0.0
+MA,Ineligible,1367253.4,55.9,0.0,0.0
+MA,No earned income,163230.92,6.7,0.0,0.0
+MA,Pre-phase-in,39122.17,1.6,497.64935,199.05975
+MA,Full amount,775.058,0.0,632.00006,252.79997
+MA,Partially phased out,21951.188,0.9,362.97803,145.19122
+MA,Fully phased out,853149.5,34.9,0.0,0.0
+MD,Ineligible,926722.4,53.3,0.0,0.0
+MD,No earned income,97357.57,5.6,0.0,0.0
+MD,Pre-phase-in,19581.512,1.1,469.82965,899.6156
+MD,Full amount,673.052,0.0,631.9999,1145.5214
+MD,Partially phased out,20056.42,1.2,350.75146,579.90436
+MD,Fully phased out,673073.6,38.7,0.0,0.0
+ME,Ineligible,233543.02,53.5,0.0,0.0
+ME,No earned income,28112.352,6.4,0.0,0.0
+ME,Pre-phase-in,3628.5383,0.8,479.49707,239.74854
+ME,Full amount,66.5702,0.0,632.0,316.0
+ME,Partially phased out,5021.548,1.2,354.7684,177.3842
+ME,Fully phased out,166282.9,38.1,0.0,0.0
+MI,Ineligible,1612950.5,54.7,0.0,0.0
+MI,No earned income,202805.86,6.9,0.0,0.0
+MI,Pre-phase-in,40620.59,1.4,500.584,150.1752
+MI,Full amount,1816.3854,0.1,632.0,189.59996
+MI,Partially phased out,16553.447,0.6,518.3705,155.51114
+MI,Fully phased out,1072715.8,36.4,0.0,0.0
+MN,Ineligible,777345.56,49.2,0.0,0.0
+MN,No earned income,92785.24,5.9,0.0,0.0
+MN,Pre-phase-in,24572.006,1.6,499.59137,515.8987
+MN,Full amount,607.66266,0.0,631.9999,637.73914
+MN,Partially phased out,13705.589,0.9,391.5037,578.87744
+MN,Fully phased out,670917.06,42.5,0.0,0.0
+MO,Ineligible,835192.44,53.1,0.0,0.0
+MO,No earned income,104288.97,6.6,0.0,0.0
+MO,Pre-phase-in,12013.582,0.8,484.0781,96.81563
+MO,Full amount,537.36273,0.0,632.0,126.4
+MO,Partially phased out,12784.181,0.8,442.70206,88.54041
+MO,Fully phased out,607657.7,38.6,0.0,0.0
+MS,Ineligible,419520.0,55.8,0.0,0.0
+MS,No earned income,45843.477,6.1,0.0,0.0
+MS,Pre-phase-in,2575.797,0.3,406.55896,0.0
+MS,Full amount,166.1088,0.0,632.0,0.0
+MS,Partially phased out,7846.9844,1.0,404.25897,0.0
+MS,Fully phased out,275905.66,36.7,0.0,0.0
+MT,Ineligible,167522.28,51.9,0.0,0.0
+MT,No earned income,18607.895,5.8,0.0,0.0
+MT,Pre-phase-in,2331.9133,0.7,462.88824,46.288826
+MT,Full amount,77.42616,0.0,631.99994,63.2
+MT,Partially phased out,3967.5837,1.2,334.9668,33.49668
+MT,Fully phased out,130098.75,40.3,0.0,0.0
+NC,Ineligible,1696681.8,56.2,0.0,0.0
+NC,No earned income,207752.4,6.9,0.0,0.0
+NC,Pre-phase-in,11699.434,0.4,451.06644,0.0
+NC,Full amount,875.7679,0.0,632.00006,0.0
+NC,Partially phased out,24799.03,0.8,392.04834,0.0
+NC,Fully phased out,1076639.2,35.7,0.0,0.0
+ND,Ineligible,93042.516,44.6,0.0,0.0
+ND,No earned income,10131.772,4.9,0.0,0.0
+ND,Pre-phase-in,4071.564,2.0,507.6821,0.0
+ND,Full amount,3.9011254,0.0,632.0,0.0
+ND,Partially phased out,932.3558,0.4,620.9536,0.0
+ND,Fully phased out,100376.46,48.1,0.0,0.0
+NE,Ineligible,259955.0,46.8,0.0,0.0
+NE,No earned income,30927.43,5.6,0.0,0.0
+NE,Pre-phase-in,4230.322,0.8,484.84406,48.48441
+NE,Full amount,54.920815,0.0,631.99994,63.20001
+NE,Partially phased out,5635.957,1.0,389.42334,38.942337
+NE,Fully phased out,254242.17,45.8,0.0,0.0
+NH,Ineligible,224852.69,48.2,0.0,0.0
+NH,No earned income,22175.135,4.8,0.0,0.0
+NH,Pre-phase-in,10499.317,2.3,341.3794,0.0
+NH,Full amount,0.36059391,0.0,631.9999,0.0
+NH,Partially phased out,4283.302,0.9,369.89697,0.0
+NH,Fully phased out,204365.39,43.8,0.0,0.0
+NJ,Ineligible,1327728.9,49.7,0.0,0.0
+NJ,No earned income,152476.06,5.7,0.0,0.0
+NJ,Pre-phase-in,44810.92,1.7,469.32755,187.73102
+NJ,Full amount,816.7071,0.0,632.00006,252.79999
+NJ,Partially phased out,28470.457,1.1,357.7779,143.11118
+NJ,Fully phased out,1116202.4,41.8,0.0,0.0
+NM,Ineligible,404188.94,59.9,0.0,0.0
+NM,No earned income,55271.652,8.2,0.0,0.0
+NM,Pre-phase-in,8052.7715,1.2,507.6397,126.90993
+NM,Full amount,333.1007,0.0,632.00006,158.00002
+NM,Partially phased out,6802.738,1.0,365.1997,91.29993
+NM,Fully phased out,200154.3,29.7,0.0,0.0
+NV,Ineligible,506265.03,52.6,0.0,0.0
+NV,No earned income,57386.582,6.0,0.0,0.0
+NV,Pre-phase-in,14720.673,1.5,504.0872,0.0
+NV,Full amount,148.53976,0.0,632.0,0.0
+NV,Partially phased out,8670.565,0.9,444.6631,0.0
+NV,Fully phased out,375612.94,39.0,0.0,0.0
+NY,Ineligible,3385627.2,55.6,0.0,0.0
+NY,No earned income,414966.78,6.8,0.0,0.0
+NY,Pre-phase-in,84690.75,1.4,473.9047,142.17131
+NY,Full amount,4793.9814,0.1,632.00006,187.95201
+NY,Partially phased out,57803.137,0.9,371.3948,86.73438
+NY,Fully phased out,2141613.5,35.2,0.0,0.0
+OH,Ineligible,1660358.1,52.4,0.0,0.0
+OH,No earned income,201214.5,6.3,0.0,0.0
+OH,Pre-phase-in,35480.473,1.1,496.31277,148.89384
+OH,Full amount,1062.4825,0.0,632.00006,189.60002
+OH,Partially phased out,27212.557,0.9,445.73523,133.72055
+OH,Fully phased out,1246077.8,39.3,0.0,0.0
+OK,Ineligible,601921.5,52.7,0.0,0.0
+OK,No earned income,77404.78,6.8,0.0,0.0
+OK,Pre-phase-in,12928.621,1.1,493.86475,24.441998
+OK,Full amount,425.45355,0.0,631.9999,26.308289
+OK,Partially phased out,7212.5874,0.6,491.54944,14.299281
+OK,Fully phased out,441851.6,38.7,0.0,0.0
+OR,Ineligible,796490.7,57.5,0.0,0.0
+OR,No earned income,91706.81,6.6,0.0,0.0
+OR,Pre-phase-in,13906.58,1.0,489.80258,44.082233
+OR,Full amount,593.1798,0.0,631.99994,56.879993
+OR,Partially phased out,13682.355,1.0,343.76025,30.938423
+OR,Fully phased out,468014.56,33.8,0.0,0.0
+PA,Ineligible,2221587.5,54.8,0.0,0.0
+PA,No earned income,261490.27,6.4,0.0,0.0
+PA,Pre-phase-in,57390.523,1.4,501.43756,0.0
+PA,Full amount,1836.4663,0.0,632.0,0.0
+PA,Partially phased out,29079.27,0.7,390.8903,0.0
+PA,Fully phased out,1486028.4,36.6,0.0,0.0
+RI,Ineligible,197708.66,49.7,0.0,0.0
+RI,No earned income,23615.35,5.9,0.0,0.0
+RI,Pre-phase-in,6746.8735,1.7,491.96518,78.71443
+RI,Full amount,183.33531,0.0,632.0,101.12
+RI,Partially phased out,2940.4941,0.7,418.9308,67.02892
+RI,Fully phased out,166388.2,41.8,0.0,0.0
+SC,Ineligible,769749.3,55.5,0.0,0.0
+SC,No earned income,89473.05,6.4,0.0,0.0
+SC,Pre-phase-in,5157.9634,0.4,435.94592,544.9495
+SC,Full amount,683.06305,0.0,631.99994,789.99994
+SC,Partially phased out,10066.327,0.7,464.98962,581.2448
+SC,Fully phased out,512821.5,36.9,0.0,0.0
+SD,Ineligible,118655.95,46.1,0.0,0.0
+SD,No earned income,16588.975,6.4,0.0,0.0
+SD,Pre-phase-in,1245.0791,0.5,504.92484,0.0
+SD,Full amount,0.10412951,0.0,632.00006,0.0
+SD,Partially phased out,2807.9924,1.1,332.0377,0.0
+SD,Fully phased out,118360.67,45.9,0.0,0.0
+TN,Ineligible,1009965.5,47.5,0.0,0.0
+TN,No earned income,132509.69,6.2,0.0,0.0
+TN,Pre-phase-in,26534.91,1.2,403.13788,0.0
+TN,Full amount,507.1686,0.0,631.9999,0.0
+TN,Partially phased out,10116.405,0.5,525.4987,0.0
+TN,Fully phased out,946190.3,44.5,0.0,0.0
+TX,Ineligible,4019368.2,48.6,0.0,0.0
+TX,No earned income,487542.28,5.9,0.0,0.0
+TX,Pre-phase-in,152565.27,1.8,480.83218,0.0
+TX,Full amount,196.01257,0.0,632.00006,0.0
+TX,Partially phased out,57381.688,0.7,500.75223,0.0
+TX,Fully phased out,3553438.8,43.0,0.0,0.0
+UT,Ineligible,345823.22,47.5,0.0,0.0
+UT,No earned income,39239.773,5.4,0.0,0.0
+UT,Pre-phase-in,6227.8457,0.9,467.4281,0.0
+UT,Full amount,130.31685,0.0,631.9999,0.0
+UT,Partially phased out,10770.686,1.5,357.29318,0.0
+UT,Fully phased out,326509.88,44.8,0.0,0.0
+VA,Ineligible,1276002.0,54.3,0.0,0.0
+VA,No earned income,147874.81,6.3,0.0,0.0
+VA,Pre-phase-in,11077.845,0.5,431.60608,64.74091
+VA,Full amount,626.7285,0.0,632.0,94.8
+VA,Partially phased out,25376.033,1.1,369.48682,55.479294
+VA,Fully phased out,887535.94,37.8,0.0,0.0
+VT,Ineligible,111693.305,52.4,0.0,0.0
+VT,No earned income,12993.281,6.1,0.0,0.0
+VT,Pre-phase-in,2901.803,1.4,506.58264,192.5014
+VT,Full amount,82.56235,0.0,631.99994,240.16003
+VT,Partially phased out,1989.4019,0.9,358.7914,136.34074
+VT,Fully phased out,83442.83,39.2,0.0,0.0
+WA,Ineligible,1369159.1,50.5,0.0,0.0
+WA,No earned income,155331.19,5.7,0.0,0.0
+WA,Pre-phase-in,66998.695,2.5,508.81302,324.99997
+WA,Full amount,9.786905,0.0,632.0,324.99997
+WA,Partially phased out,17477.504,0.6,477.79034,324.9583
+WA,Fully phased out,1100086.0,40.6,0.0,0.0
+WI,Ineligible,923438.06,53.3,0.0,0.0
+WI,No earned income,111346.82,6.4,0.0,0.0
+WI,Pre-phase-in,15312.648,0.9,452.62857,0.0
+WI,Full amount,774.9501,0.0,632.0,0.0
+WI,Partially phased out,12071.585,0.7,421.98117,0.0
+WI,Fully phased out,668991.9,38.6,0.0,0.0
+WV,Ineligible,302051.8,58.1,0.0,0.0
+WV,No earned income,36730.87,7.1,0.0,0.0
+WV,Pre-phase-in,5850.024,1.1,508.3707,0.0
+WV,Full amount,620.71576,0.1,631.99994,0.0
+WV,Partially phased out,3761.238,0.7,542.116,0.0
+WV,Fully phased out,170577.69,32.8,0.0,0.0
+WY,Ineligible,83720.836,49.2,0.0,0.0
+WY,No earned income,9110.276,5.4,0.0,0.0
+WY,Pre-phase-in,2233.8857,1.3,320.7945,0.0
+WY,Full amount,86.93167,0.1,632.0,0.0
+WY,Partially phased out,803.0245,0.5,622.7631,0.0
+WY,Fully phased out,74227.15,43.6,0.0,0.0

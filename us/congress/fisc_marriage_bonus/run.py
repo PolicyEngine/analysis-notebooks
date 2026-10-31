@@ -43,6 +43,8 @@ TAX_UNIT_VARIABLES = (
     "age_head",
     "age_spouse",
 )
+# Each person's household and tax unit link the two entities in summarize.py.
+PERSON_VARIABLES = ("person_household_id", "person_tax_unit_id")
 # The reform registers these two variables, so they exist only in reform runs.
 REFORM_ONLY_VARIABLES = (
     "family_income_supplement_credit",
@@ -63,6 +65,7 @@ def run(scenario: str, year: int, out: Path, dataset: str | None = None) -> Path
 
     arrays = {f"household.{name}": calculate(name) for name in HOUSEHOLD_VARIABLES}
     arrays |= {f"tax_unit.{name}": calculate(name) for name in TAX_UNIT_VARIABLES}
+    arrays |= {f"person.{name}": calculate(name) for name in PERSON_VARIABLES}
     arrays["tax_unit.joint"] = calculate("filing_status") == "JOINT"
     if not arrays["tax_unit.joint"].any():
         raise ValueError("no joint filers: filing_status did not decode to names")

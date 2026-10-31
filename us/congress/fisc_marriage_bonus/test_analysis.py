@@ -25,8 +25,8 @@ from analysis import (
     concentration_coefficient,
     decile_table,
     group_shares,
-    person_gini,
     weighted_decile,
+    weighted_gini,
 )
 
 SIZE = st.integers(min_value=20, max_value=200)
@@ -160,25 +160,25 @@ class TestConcentrationCoefficient:
         assert coefficient == pytest.approx(-1, abs=0.002)
 
 
-class TestPersonGini:
+class TestWeightedGini:
     @settings(deadline=None)
     @given(households())
     def test_agrees_with_microdf(self, hh):
         from microdf import MicroSeries
 
-        series = MicroSeries(hh["income"], weights=hh["weight"] * hh["people"])
-        assert person_gini(hh["income"], hh["weight"], hh["people"]) == pytest.approx(
-            series.gini(negatives="zero"), abs=1e-9
+        income = np.abs(hh["income"])
+        assert weighted_gini(income, hh["weight"]) == pytest.approx(
+            MicroSeries(income, weights=hh["weight"]).gini(), abs=1e-9
         )
 
     @settings(deadline=None)
     @given(households())
-    def test_stays_between_zero_and_one(self, hh):
-        gini = person_gini(hh["income"], hh["weight"], hh["people"])
+    def test_stays_between_zero_and_one_without_negatives(self, hh):
+        gini = weighted_gini(np.abs(hh["income"]), hh["weight"])
         assert -1e-9 <= gini <= 1 + 1e-9
 
     def test_equal_incomes_give_zero(self):
-        gini = person_gini(np.full(5, 40_000.0), np.ones(5), np.arange(1, 6))
+        gini = weighted_gini(np.full(5, 40_000.0), np.arange(1.0, 6.0))
         assert gini == pytest.approx(0)
 
 

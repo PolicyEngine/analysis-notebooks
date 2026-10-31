@@ -15,8 +15,10 @@ from summarize import (
     CREDIT,
     NET_INCOME,
     PRIMARY_YEAR,
+    bonus_reach,
     check_invariants,
     distribution,
+    gini_by_provision,
     versus_reeves,
 )
 
@@ -51,6 +53,8 @@ def fake_run(rate: float, *, ctc: float = 0.0) -> dict[str, np.ndarray]:
         "household.equiv_household_net_income": (0.9 * agi + credit + ctc)
         / np.sqrt(2 + index % 3),
         "household.household_income_decile": 1 + index % 10,
+        "person.person_tax_unit_id": index,
+        "person.person_household_id": index,
     }
     return arrays
 
@@ -65,16 +69,17 @@ def runs(tmp_path):
     work.mkdir()
     rerun.mkdir()
     save(work, "baseline", fake_run(0.0, ctc=500.0))
+    for scenario in ("fisc", "fisc_restored_bonus"):
+        save(work, scenario, fake_run(0.2))
     for scenario in (
-        "fisc",
-        "fisc_restored_bonus",
         "fisc_no_newborn_add_on",
         "fisc_no_phase_out",
         "fisc_no_agi_cap",
     ):
-        save(work, scenario, fake_run(0.2))
+        save(work, scenario, fake_run(0.2, ctc=100.0))
     save(work, "fisc_no_bonus", fake_run(0.0))
     save(rerun, "fisc_no_bonus", fake_run(0.0))
+    save(work, "fisc_ctc_repeal_only", fake_run(0.0, ctc=-100.0))
     return work, rerun
 
 
@@ -160,6 +165,31 @@ class TestDistribution:
         work, _ = runs
         summary = distribution(work)["component_summary"]
         assert summary.groupby("ranking").component.nunique().eq(7).all()
+
+
+class TestBonusReach:
+    def test_rows_sum_to_the_bonus(self, runs):
+        work, _ = runs
+        lines = versus_reeves(work).set_index("line").value
+        assert bonus_reach(work).bonus.sum() == pytest.approx(lines["modelled_bonus"])
+
+    def test_a_tax_unit_across_two_households_fails(self, runs):
+        work, _ = runs
+        no_bonus = fake_run(0.0)
+        moved = no_bonus["person.person_tax_unit_id"].copy()
+        moved[1] = 0
+        no_bonus["person.person_tax_unit_id"] = moved
+        save(work, "fisc_no_bonus", no_bonus)
+        with pytest.raises(AssertionError, match="spans"):
+            bonus_reach(work)
+
+
+class TestGiniByProvision:
+    def test_every_provision_has_a_row(self, runs):
+        work, _ = runs
+        table = gini_by_provision(work).set_index("provision")
+        assert len(table) == 7
+        assert table.net_income_change["marriage_bonus"] > 0
 
 
 class TestVersusReeves:

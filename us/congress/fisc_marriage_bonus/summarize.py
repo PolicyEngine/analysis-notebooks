@@ -23,8 +23,8 @@ from analysis import (
     concentration_coefficient,
     decile_table,
     group_shares,
-    person_gini,
     weighted_decile,
+    weighted_gini,
 )
 
 HERE = Path(__file__).parent
@@ -55,7 +55,14 @@ def api_result(policy: int, baseline: int, year: int) -> dict:
 
 
 def load(work: Path, scenario: str, year: int) -> dict[str, np.ndarray]:
-    return dict(np.load(work / f"{scenario}_{year}.npz"))
+    """Read a run with its floats widened, since float32 sums lose dollars."""
+    arrays = np.load(work / f"{scenario}_{year}.npz")
+    return {
+        name: arrays[name].astype(float)
+        if arrays[name].dtype == np.float32
+        else arrays[name]
+        for name in arrays
+    }
 
 
 def weighted_sum(run: dict[str, np.ndarray], name: str) -> float:
@@ -281,7 +288,7 @@ def check_against_api(work: Path) -> dict:
         "fisc_no_agi_cap": direct_gini(FISC, NO_AGI_CAP)["baseline"],
     }
     gaps = {
-        scenario: abs(local_gini(load(work, scenario, PRIMARY_YEAR)) - reported)
+        scenario: abs(household_gini(load(work, scenario, PRIMARY_YEAR)) - reported)
         for scenario, reported in api_gini.items()
     }
     results["largest_gini_gap"] = float(max(gaps.values()))
@@ -294,12 +301,105 @@ def direct_gini(policy: int, baseline: int) -> dict:
     return api_result(policy, baseline, PRIMARY_YEAR)["inequality"]["gini"]
 
 
-def local_gini(run: dict[str, np.ndarray]) -> float:
-    return person_gini(
-        run["household.equiv_household_net_income"],
-        run["household.household_weight"],
-        run["household.household_count_people"],
+def household_gini(run: dict[str, np.ndarray]) -> float:
+    """Household net income across households: the Gini the production API reports."""
+    return weighted_gini(run[NET_INCOME], run["household.household_weight"])
+
+
+def equivalised_gini(run: dict[str, np.ndarray]) -> float:
+    """Equivalised household net income across people, with negatives at zero."""
+    return weighted_gini(
+        np.maximum(run["household.equiv_household_net_income"], 0),
+        run["household.household_weight"] * run["household.household_count_people"],
     )
+
+
+def gini_by_provision(work: Path) -> pd.DataFrame:
+    """Each provision's effect on both Gini measures, from the local runs."""
+    provisions = {
+        "ctc_repeal": ("fisc_ctc_repeal_only", "baseline"),
+        "credit_without_bonus": ("fisc_no_bonus", "fisc_ctc_repeal_only"),
+        "marriage_bonus": ("fisc", "fisc_no_bonus"),
+        "newborn_add_on": ("fisc", "fisc_no_newborn_add_on"),
+        "phase_out": ("fisc", "fisc_no_phase_out"),
+        "agi_cap": ("fisc", "fisc_no_agi_cap"),
+        "full_fisc": ("fisc", "baseline"),
+    }
+    rows = []
+    for provision, (with_it, without_it) in provisions.items():
+        reform = load(work, with_it, PRIMARY_YEAR)
+        baseline = load(work, without_it, PRIMARY_YEAR)
+        dollars = float(
+            (
+                (reform[NET_INCOME] - baseline[NET_INCOME])
+                * baseline["household.household_weight"]
+            ).sum()
+        )
+        household_change = household_gini(reform) - household_gini(baseline)
+        equivalised_change = equivalised_gini(reform) - equivalised_gini(baseline)
+        rows.append(
+            {
+                "provision": provision,
+                "net_income_change": dollars,
+                "household_gini_without": household_gini(baseline),
+                "household_gini_with": household_gini(reform),
+                "household_gini_change_per_billion": household_change
+                / abs(dollars)
+                * 1e9,
+                "equivalised_gini_without": equivalised_gini(baseline),
+                "equivalised_gini_with": equivalised_gini(reform),
+                "equivalised_gini_change_per_billion": equivalised_change
+                / abs(dollars)
+                * 1e9,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def bonus_reach(work: Path) -> pd.DataFrame:
+    """How marriage and the limits shape the bonus in each current-law decile.
+
+    The person links carry each tax unit to its household's decile.
+    """
+    current = load(work, "baseline", PRIMARY_YEAR)
+    fisc = load(work, "fisc", PRIMARY_YEAR)
+    no_bonus = load(work, "fisc_no_bonus", PRIMARY_YEAR)
+    links = pd.DataFrame(
+        {
+            "tax_unit": no_bonus["person.person_tax_unit_id"],
+            "household": no_bonus["person.person_household_id"],
+        }
+    ).drop_duplicates()
+    if links.tax_unit.duplicated().any():
+        raise AssertionError("a tax unit spans two households")
+    household = links.set_index("tax_unit").household
+    decile = pd.Series(
+        current["household.household_income_decile"],
+        index=current["household.household_id"],
+    )
+    weight = no_bonus["tax_unit.tax_unit_weight"]
+    joint = no_bonus["tax_unit.joint"].astype(bool)
+    base = no_bonus[BASE]
+    frame = pd.DataFrame(
+        {
+            "decile": decile.reindex(
+                household.reindex(no_bonus["tax_unit.tax_unit_id"]).to_numpy()
+            ).to_numpy(),
+            "units_with_a_child": weight * (base > 0),
+            "joint_units_with_a_child": weight * ((base > 0) & joint),
+            "base_amount": weight * base,
+            "joint_base_amount": weight * base * joint,
+            "statutory_bonus": weight * base * joint * STATUTORY_BONUS_RATE,
+            "bonus": weight * (fisc[CREDIT] - no_bonus[CREDIT]),
+        }
+    )
+    table = frame.groupby("decile").sum()
+    table["joint_share_of_units_with_a_child"] = (
+        table.joint_units_with_a_child / table.units_with_a_child
+    )
+    table["joint_share_of_base_amount"] = table.joint_base_amount / table.base_amount
+    table["share_of_statutory_bonus_paid"] = table.bonus / table.statutory_bonus
+    return table.reset_index()
 
 
 def distribution(work: Path) -> dict[str, pd.DataFrame]:
@@ -322,7 +422,8 @@ def distribution(work: Path) -> dict[str, pd.DataFrame]:
     components = {
         "marriage_bonus": fisc[credit] - no_bonus[credit],
         "credit_without_bonus": no_bonus[credit],
-        "ctc_repeal": no_bonus[net] - current[net] - no_bonus[credit],
+        "ctc_repeal": load(work, "fisc_ctc_repeal_only", PRIMARY_YEAR)[net]
+        - current[net],
         "full_fisc_net": fisc[net] - current[net],
         "newborn_add_on": fisc[net]
         - load(work, "fisc_no_newborn_add_on", PRIMARY_YEAR)[net],
@@ -458,6 +559,8 @@ def main(work: Path, rerun: Path, march: Path, ecps: Path) -> None:
     invariants = check_invariants(work, rerun) | check_against_api(work)
     for name, table in distribution(work).items():
         table.to_csv(RESULTS / f"{name}_2026.csv", index=False)
+    gini_by_provision(work).to_csv(RESULTS / "gini_by_provision_2026.csv", index=False)
+    bonus_reach(work).to_csv(RESULTS / "bonus_reach_2026.csv", index=False)
     versus_reeves(work).to_csv(RESULTS / "versus_reeves_estimate.csv", index=False)
     years, ladder = reconciliation(march, ecps)
     years.to_csv(RESULTS / "march_2025_comparison.csv")

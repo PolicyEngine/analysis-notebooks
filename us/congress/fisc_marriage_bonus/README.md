@@ -74,8 +74,8 @@ The two pieces that raise inequality are the repeal of the child tax credit and 
 
 | Provision | Net cost | Gini without it | Gini with it | Gini change per $B | Child poverty without it | Child poverty with it |
 |---|---|---|---|---|---|---|
-| Child tax credit repeal | -$133.21B | 0.47462 | 0.47774 | +0.000023 | 18.02% | 23.06% |
-| Credit without the bonus | $244.24B | 0.47774 | 0.47012 | -0.000031 | 23.06% | 12.36% |
+| Child tax credit repeal | -$133.21B | 0.47462 | 0.47773 | +0.000023 | 18.02% | 23.06% |
+| Credit without the bonus | $244.24B | 0.47773 | 0.47012 | -0.000031 | 23.06% | 12.36% |
 | Marriage bonus | $34.28B | 0.47012 | 0.46941 | -0.000021 | 12.36% | 11.45% |
 | Newborn add-on | $8.87B | 0.46963 | 0.46941 | -0.000025 | 11.76% | 11.45% |
 | Income phase-out | -$37.59B | 0.47018 | 0.46941 | -0.000021 | 11.44% | 11.45% |

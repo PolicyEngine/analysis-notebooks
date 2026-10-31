@@ -1,0 +1,247 @@
+{
+ "budget": {
+  "baseline_net_income": 17603711122176.05,
+  "benefit_spending_impact": 0.0,
+  "budgetary_impact": 37592807769.3772,
+  "households": 124557998.60092863,
+  "state_tax_revenue_impact": -149.94935279380297,
+  "tax_revenue_impact": 37592807769.3772
+ },
+ "data_version": "populace-us-2024-spm-20260915",
+ "decile": {
+  "average": {
+   "1": -1.4760540747265622,
+   "10": -2041.596557223238,
+   "2": 0.0,
+   "3": 0.0,
+   "4": 0.0,
+   "5": -1.907861400031834,
+   "6": -29.08255837674369,
+   "7": -54.502452097134665,
+   "8": -60.32594942027936,
+   "9": -1241.2916237731115
+  },
+  "relative": {
+   "1": -5.335704108697062e-05,
+   "10": -0.0037985308879665,
+   "2": 0.0,
+   "3": 0.0,
+   "4": 0.0,
+   "5": -1.978061935176891e-05,
+   "6": -0.0002457494943492595,
+   "7": -0.00037339442950920233,
+   "8": -0.0003342610568571443,
+   "9": -0.005166774805833368
+  }
+ },
+ "detailed_budget": {
+  "ctc": {
+   "baseline": 157468351520.51172,
+   "difference": 0.0,
+   "is_tax": false,
+   "reform": 157468351520.51172
+  },
+  "eitc": {
+   "baseline": 68266669758.05227,
+   "difference": 0.0,
+   "is_tax": false,
+   "reform": 68266669758.05227
+  },
+  "employee_payroll_tax": {
+   "baseline": 852126740432.2941,
+   "difference": 0.0,
+   "is_tax": true,
+   "reform": 852126740432.2941
+  },
+  "income_tax": {
+   "baseline": 2428043666064.2173,
+   "difference": 37592807931.06787,
+   "is_tax": true,
+   "reform": 2465636473995.285
+  },
+  "medicaid": {
+   "baseline": 591749246022.5889,
+   "difference": 0.0,
+   "is_tax": false,
+   "reform": 591749246022.5889
+  },
+  "medicare_cost": {
+   "baseline": 705428518098.2336,
+   "difference": 0.0,
+   "is_tax": false,
+   "reform": 705428518098.2336
+  },
+  "snap": {
+   "baseline": 100179106496.91594,
+   "difference": 0.0,
+   "is_tax": false,
+   "reform": 100179106496.91594
+  },
+  "social_security": {
+   "baseline": 1705545725120.4775,
+   "difference": 0.0,
+   "is_tax": false,
+   "reform": 1705545725120.4775
+  },
+  "ssi": {
+   "baseline": 57855559925.80327,
+   "difference": 0.0,
+   "is_tax": false,
+   "reform": 57855559925.80327
+  },
+  "state_income_tax": {
+   "baseline": 613850288080.8735,
+   "difference": -149.949462890625,
+   "is_tax": true,
+   "reform": 613850287930.9241
+  },
+  "tanf": {
+   "baseline": 5045530740.344602,
+   "difference": 0.0,
+   "is_tax": false,
+   "reform": 5045530740.344602
+  }
+ },
+ "inequality": {
+  "gini": {
+   "baseline": 0.47018235820996135,
+   "reform": 0.46941029020684466
+  },
+  "top_10_pct_share": {
+   "baseline": 0.36133313862205285,
+   "reform": 0.36063135734411217
+  },
+  "top_1_pct_share": {
+   "baseline": 0.09435695151718532,
+   "reform": 0.09454866085729019
+  }
+ },
+ "intra_decile": {
+  "all": {
+   "Gain less than 5%": 0.0,
+   "Gain more than 5%": 0.0,
+   "Lose less than 5%": 0.06220430886182617,
+   "Lose more than 5%": 0.0023081164075271525,
+   "No change": 0.9354875747306466
+  },
+  "deciles": {
+   "Gain less than 5%": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "Gain more than 5%": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "Lose less than 5%": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0009824391153633444,
+    0.00858975418280788,
+    0.008117301767519725,
+    0.013840004554893332,
+    0.23703116623327405,
+    0.3534824227644034
+   ],
+   "Lose more than 5%": [
+    0.00038390317486880265,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0022402420737437125,
+    0.0032610931499555086,
+    0.006748896914244266,
+    0.010447028762459237
+   ],
+   "No change": [
+    0.9996160968251309,
+    1.0,
+    1.0,
+    1.0,
+    0.9990175608846368,
+    0.9914102458171922,
+    0.9896424561587364,
+    0.9828989022951512,
+    0.7562199368524815,
+    0.6360705484731373
+   ]
+  }
+ },
+ "model_version": "2.2.1",
+ "policyengine_bundle": {
+  "data_version": "populace-us-2024-spm-20260915",
+  "dataset": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-spm-20260915",
+  "dataset_sha256": "6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84",
+  "model_version": "2.2.1",
+  "policyengine_version": "6.11.1",
+  "spm": {
+   "contract_version": "canonical-spm-v1",
+   "defaults": {
+    "as_of": null,
+    "county_vintage": "2020",
+    "forecast_content_sha256": "3d86d5c4c0423480e6b69b75d222ffa4a7a2639e4094df5ba2504af01be17173",
+    "geography_id": null,
+    "geography_kind": "county",
+    "scenario": "ce_trend"
+   }
+  }
+ },
+ "poverty": {
+  "deep_poverty": {
+   "adult": {
+    "baseline": 0.02702661907219768,
+    "reform": 0.027182473163154627
+   },
+   "all": {
+    "baseline": 0.027219515908111155,
+    "reform": 0.027474829098557127
+   },
+   "child": {
+    "baseline": 0.014913134376480858,
+    "reform": 0.015634394853459268
+   },
+   "senior": {
+    "baseline": 0.043285102449777124,
+    "reform": 0.043285102449777124
+   }
+  },
+  "poverty": {
+   "adult": {
+    "baseline": 0.11429898254892529,
+    "reform": 0.11436645769300924
+   },
+   "all": {
+    "baseline": 0.11304508195738178,
+    "reform": 0.11310526919639982
+   },
+   "child": {
+    "baseline": 0.11444326665224283,
+    "reform": 0.11453224378160226
+   },
+   "senior": {
+    "baseline": 0.10714675287901287,
+    "reform": 0.10714675334957091
+   }
+  }
+ }
+}

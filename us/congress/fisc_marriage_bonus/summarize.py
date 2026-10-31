@@ -32,6 +32,10 @@ API = RESULTS / "api"
 MARCH_2025_CSV = HERE.parent / "fisc_act_10_year_impact.csv"
 FISC = 76612
 NO_BONUS = 99021
+NO_NEWBORN_ADD_ON = 99022
+NO_PHASE_OUT = 99023
+NO_AGI_CAP = 99024
+FISC_CTC_REPEAL_ONLY = 99025
 CURRENT_LAW = 2
 REEVES_ESTIMATE = 30e9
 DOLLAR_TOLERANCE = 1.0
@@ -106,6 +110,50 @@ def poverty_effects() -> pd.DataFrame:
                     "reform_rate": poverty[group]["reform"],
                 }
             )
+    return pd.DataFrame(rows)
+
+
+def provision_comparison() -> pd.DataFrame:
+    """Each provision's production API results for 2026, with and without it.
+
+    The repeal and the credit add up in sequence from current law. The other
+    three rows remove one provision from the full reform. Each row ranks deciles
+    on income without the provision, and each reform dollar raises net income.
+    """
+    provisions = {
+        "ctc_repeal": (FISC_CTC_REPEAL_ONLY, CURRENT_LAW),
+        "credit_without_bonus": (NO_BONUS, FISC_CTC_REPEAL_ONLY),
+        "marriage_bonus": (FISC, NO_BONUS),
+        "newborn_add_on": (FISC, NO_NEWBORN_ADD_ON),
+        "phase_out": (FISC, NO_PHASE_OUT),
+        "agi_cap": (FISC, NO_AGI_CAP),
+        "full_fisc": (FISC, CURRENT_LAW),
+    }
+    rows = []
+    for provision, (policy, baseline) in provisions.items():
+        result = api_result(policy, baseline, PRIMARY_YEAR)
+        gini = result["inequality"]["gini"]
+        poverty = result["poverty"]["poverty"]
+        relative = result["decile"]["relative"]
+        average = result["decile"]["average"]
+        cost = -result["budget"]["budgetary_impact"]
+        rows.append(
+            {
+                "provision": provision,
+                "net_cost": cost,
+                "gini_without": gini["baseline"],
+                "gini_with": gini["reform"],
+                "gini_change_per_billion": (gini["reform"] - gini["baseline"])
+                / abs(cost)
+                * 1e9,
+                "poverty_without": poverty["all"]["baseline"],
+                "poverty_with": poverty["all"]["reform"],
+                "child_poverty_without": poverty["child"]["baseline"],
+                "child_poverty_with": poverty["child"]["reform"],
+                **{f"mean_decile_{d}": average[str(d)] for d in range(1, 11)},
+                **{f"relative_decile_{d}": relative[str(d)] for d in range(1, 11)},
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -376,6 +424,7 @@ def reconciliation(march: Path, ecps: Path) -> tuple[pd.DataFrame, pd.DataFrame]
 def main(work: Path, rerun: Path, march: Path, ecps: Path) -> None:
     budget_by_year().to_csv(RESULTS / "budget_by_year.csv")
     poverty_effects().to_csv(RESULTS / "poverty_2026.csv", index=False)
+    provision_comparison().to_csv(RESULTS / "provisions_2026.csv", index=False)
     invariants = check_invariants(work, rerun) | check_against_api(work)
     for name, table in distribution(work).items():
         table.to_csv(RESULTS / f"{name}_2026.csv", index=False)

@@ -35,6 +35,7 @@ COMPARISONS = (
     (FISC, FISC_NO_PHASE_OUT, (2026,)),
     (FISC, FISC_NO_AGI_CAP, (2026,)),
     (FISC_CTC_REPEAL_ONLY, CURRENT_LAW, (2026,)),
+    (FISC_NO_BONUS, FISC_CTC_REPEAL_ONLY, (2026,)),
 )
 API = "https://api.policyengine.org/us/economy"
 POLL_SECONDS = 60

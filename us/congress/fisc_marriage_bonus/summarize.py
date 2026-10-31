@@ -23,6 +23,7 @@ from analysis import (
     concentration_coefficient,
     decile_table,
     group_shares,
+    person_gini,
     weighted_decile,
 )
 
@@ -40,6 +41,7 @@ CURRENT_LAW = 2
 REEVES_ESTIMATE = 30e9
 DOLLAR_TOLERANCE = 1.0
 RELATIVE_TOLERANCE = 1e-3
+GINI_TOLERANCE = 1e-5
 CAREGIVER_AGE = 18
 PRIMARY_YEAR = 2026
 CHECK_YEARS = (2026, 2035)
@@ -269,7 +271,35 @@ def check_against_api(work: Path) -> dict:
         results[f"{label}_largest_decile_mean_gap_dollars"] = float(max(gaps))
         if max(gaps) > DOLLAR_TOLERANCE:
             raise AssertionError(f"{label}: local and API decile means disagree")
+
+    api_gini = {
+        "baseline": direct_gini(FISC, CURRENT_LAW)["baseline"],
+        "fisc": direct_gini(FISC, CURRENT_LAW)["reform"],
+        "fisc_no_bonus": direct_gini(FISC, NO_BONUS)["baseline"],
+        "fisc_no_newborn_add_on": direct_gini(FISC, NO_NEWBORN_ADD_ON)["baseline"],
+        "fisc_no_phase_out": direct_gini(FISC, NO_PHASE_OUT)["baseline"],
+        "fisc_no_agi_cap": direct_gini(FISC, NO_AGI_CAP)["baseline"],
+    }
+    gaps = {
+        scenario: abs(local_gini(load(work, scenario, PRIMARY_YEAR)) - reported)
+        for scenario, reported in api_gini.items()
+    }
+    results["largest_gini_gap"] = float(max(gaps.values()))
+    if max(gaps.values()) > GINI_TOLERANCE:
+        raise AssertionError(f"local and API Gini disagree: {gaps}")
     return results
+
+
+def direct_gini(policy: int, baseline: int) -> dict:
+    return api_result(policy, baseline, PRIMARY_YEAR)["inequality"]["gini"]
+
+
+def local_gini(run: dict[str, np.ndarray]) -> float:
+    return person_gini(
+        run["household.equiv_household_net_income"],
+        run["household.household_weight"],
+        run["household.household_count_people"],
+    )
 
 
 def distribution(work: Path) -> dict[str, pd.DataFrame]:

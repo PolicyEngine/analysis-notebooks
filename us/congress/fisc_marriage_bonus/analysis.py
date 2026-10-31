@@ -191,6 +191,24 @@ def concentration_coefficient(
     )
 
 
+def person_gini(
+    equivalised_income: np.ndarray,
+    household_weight: np.ndarray,
+    people: np.ndarray,
+) -> float:
+    """Gini of equivalised household income across people, with negatives at zero.
+
+    Each person carries their household's equivalised income. The local runs
+    check this definition against the Gini the production API reports.
+    """
+    income = np.maximum(np.asarray(equivalised_income, dtype=float), 0)
+    if not income.any():
+        return 0.0
+    return concentration_coefficient(
+        income * np.asarray(people, dtype=float), income, household_weight, people
+    )
+
+
 def group_shares(table: pd.DataFrame) -> dict[str, float]:
     """Share of dollars reaching the bottom half and the top three deciles."""
     ranked = table[table.group >= 1]

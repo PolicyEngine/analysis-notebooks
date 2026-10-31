@@ -162,11 +162,14 @@ class TestConcentrationCoefficient:
 class TestScenarios:
     def test_every_variant_keeps_the_reform_on(self):
         for name, policy in SCENARIOS.items():
-            if name != "baseline":
+            if name.startswith("fisc"):
                 assert FISC_POLICY.items() <= policy.items()
 
     def test_baseline_applies_nothing(self):
         assert SCENARIOS["baseline"] == {}
+
+    def test_march_2025_baseline_leaves_the_reform_off(self):
+        assert FISC_POLICY.keys().isdisjoint(SCENARIOS["baseline_march_2025_ctc"])
 
 
 def household_income_tax(reform, *, joint, child_age, income):

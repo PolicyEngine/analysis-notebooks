@@ -42,6 +42,25 @@ SCENARIOS: dict[str, dict] = {
     "fisc_no_agi_cap": {**FISC_POLICY, f"{SUPPLEMENT}.agi_fraction": {PERIOD: 1e9}},
 }
 
+# The 2026 child tax credit schedule in the model the March 2025 run used, which
+# predates the 2025 reconciliation law. Applied to today's model, it isolates how
+# much the repealed credit's size moves the net cost of FISC.
+CTC = "gov.irs.credits.ctc"
+MARCH_2025_CTC = {
+    f"{CTC}.amount.base[0].amount": {PERIOD: 1_000},
+    f"{CTC}.amount.adult_dependent": {PERIOD: 0},
+    f"{CTC}.phase_out.threshold.JOINT": {PERIOD: 110_000},
+    f"{CTC}.phase_out.threshold.SINGLE": {PERIOD: 75_000},
+    f"{CTC}.phase_out.threshold.HEAD_OF_HOUSEHOLD": {PERIOD: 75_000},
+    f"{CTC}.phase_out.threshold.SURVIVING_SPOUSE": {PERIOD: 75_000},
+    f"{CTC}.phase_out.threshold.SEPARATE": {PERIOD: 55_000},
+    f"{CTC}.refundable.individual_max": {PERIOD: 1_000},
+    f"{CTC}.refundable.phase_in.threshold": {PERIOD: 3_000},
+    f"{CTC}.adult_ssn_requirement_applies": {PERIOD: False},
+    f"{CTC}.child_ssn_requirement_applies": {PERIOD: False},
+}
+SCENARIOS["baseline_march_2025_ctc"] = MARCH_2025_CTC
+
 # A dollar test keeps float32 rounding from counting as receipt.
 RECEIPT_THRESHOLD = 0.005
 NEGATIVE_INCOME_GROUP = -1

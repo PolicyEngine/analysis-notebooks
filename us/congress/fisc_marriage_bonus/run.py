@@ -21,8 +21,9 @@ import json
 from pathlib import Path
 
 import numpy as np
-from analysis import SCENARIOS
 from policyengine.tax_benefit_models.us import managed_microsimulation
+
+from analysis import SCENARIOS
 
 HOUSEHOLD_VARIABLES = (
     "household_id",
@@ -39,6 +40,8 @@ TAX_UNIT_VARIABLES = (
     "tax_unit_weight",
     "income_tax",
     "adjusted_gross_income",
+    "age_head",
+    "age_spouse",
 )
 # The reform registers these two variables, so they exist only in reform runs.
 REFORM_ONLY_VARIABLES = (
@@ -48,9 +51,12 @@ REFORM_ONLY_VARIABLES = (
 CURRENT_LAW_ONLY_VARIABLES = ("refundable_ctc", "non_refundable_ctc")
 
 
-def run(scenario: str, year: int, out: Path) -> Path:
+def run(scenario: str, year: int, out: Path, dataset: str | None = None) -> Path:
     policy = SCENARIOS[scenario]
-    sim = managed_microsimulation(reform=policy or None)
+    source = (
+        {"dataset": dataset, "allow_unmanaged": True} if dataset is not None else {}
+    )
+    sim = managed_microsimulation(reform=policy or None, **source)
 
     def calculate(variable: str, map_to: str | None = None) -> np.ndarray:
         return np.asarray(sim.calculate(variable, period=year, map_to=map_to).values)
@@ -61,7 +67,8 @@ def run(scenario: str, year: int, out: Path) -> Path:
     if not arrays["tax_unit.joint"].any():
         raise ValueError("no joint filers: filing_status did not decode to names")
 
-    for name in REFORM_ONLY_VARIABLES if policy else CURRENT_LAW_ONLY_VARIABLES:
+    is_reform = scenario.startswith("fisc")
+    for name in REFORM_ONLY_VARIABLES if is_reform else CURRENT_LAW_ONLY_VARIABLES:
         arrays[f"tax_unit.{name}"] = calculate(name, map_to="tax_unit")
         arrays[f"household.{name}"] = calculate(name, map_to="household")
 
@@ -84,5 +91,9 @@ if __name__ == "__main__":
     parser.add_argument("scenario", choices=sorted(SCENARIOS))
     parser.add_argument("year", type=int)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--dataset",
+        help="Path to a dataset outside the bundle, for the reconciliation only.",
+    )
     args = parser.parse_args()
-    print(run(args.scenario, args.year, args.out))
+    print(run(args.scenario, args.year, args.out, args.dataset))

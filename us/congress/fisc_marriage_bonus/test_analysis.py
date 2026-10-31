@@ -20,6 +20,7 @@ from analysis import (
     FISC_POLICY,
     NEGATIVE_INCOME_GROUP,
     SCENARIOS,
+    bonus_lost_to_limits,
     closed_form_bonus,
     closed_form_credit,
     concentration_coefficient,
@@ -78,6 +79,31 @@ class TestClosedFormBonus:
         assert float(closed_form_credit(base, True, low + step)) <= float(
             closed_form_credit(base, True, low)
         )
+
+
+class TestBonusLostToLimits:
+    @given(
+        base=floats(0, 40_000),
+        joint=st.booleans(),
+        agi=floats(-100_000, 1_000_000),
+    )
+    def test_parts_sum_to_the_statutory_bonus(self, base, joint, agi):
+        to_phase_out, to_cap = bonus_lost_to_limits(base, joint, agi)
+        paid = closed_form_bonus(base, joint, agi)
+        statutory = 0.2 * base * joint
+        assert float(to_phase_out + to_cap + paid) == pytest.approx(statutory)
+        assert float(to_phase_out) >= -1e-9
+
+    @given(base=floats(0, 40_000), agi=floats(0, 250_000))
+    def test_no_joint_filer_under_the_threshold_loses_to_the_phase_out(self, base, agi):
+        to_phase_out, _ = bonus_lost_to_limits(base, True, agi)
+        assert float(to_phase_out) == pytest.approx(0, abs=1e-6)
+
+    @given(base=floats(0, 40_000), agi=floats(100_000, 1_000_000))
+    def test_the_cap_takes_nothing_once_agi_covers_the_credit(self, base, agi):
+        _, to_cap = bonus_lost_to_limits(base, True, agi)
+        if agi >= 1.2 * base:
+            assert float(to_cap) == pytest.approx(0, abs=1e-6)
 
 
 class TestDecileTable:

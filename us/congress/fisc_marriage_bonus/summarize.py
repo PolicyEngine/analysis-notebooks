@@ -19,6 +19,7 @@ import pandas as pd
 from analysis import (
     STATUTORY_BONUS_RATE,
     YEARS,
+    bonus_lost_to_limits,
     closed_form_credit,
     concentration_coefficient,
     decile_table,
@@ -380,6 +381,9 @@ def bonus_reach(work: Path) -> pd.DataFrame:
     weight = no_bonus["tax_unit.tax_unit_weight"]
     joint = no_bonus["tax_unit.joint"].astype(bool)
     base = no_bonus[BASE]
+    to_phase_out, to_cap = bonus_lost_to_limits(
+        base, joint, no_bonus["tax_unit.adjusted_gross_income"]
+    )
     frame = pd.DataFrame(
         {
             "decile": decile.reindex(
@@ -390,6 +394,8 @@ def bonus_reach(work: Path) -> pd.DataFrame:
             "base_amount": weight * base,
             "joint_base_amount": weight * base * joint,
             "statutory_bonus": weight * base * joint * STATUTORY_BONUS_RATE,
+            "bonus_lost_to_phase_out": weight * to_phase_out,
+            "bonus_lost_to_agi_cap": weight * to_cap,
             "bonus": weight * (fisc[CREDIT] - no_bonus[CREDIT]),
         }
     )

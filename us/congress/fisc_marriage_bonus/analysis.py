@@ -104,6 +104,33 @@ def closed_form_bonus(
     )
 
 
+def bonus_lost_to_limits(
+    base_amount: np.ndarray,
+    joint: np.ndarray,
+    agi: np.ndarray,
+    bonus_rate: float = STATUTORY_BONUS_RATE,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Statutory bonus the phase-out removes, then the bonus the AGI cap removes.
+
+    Follows the bill's order, so the two parts and the bonus paid sum to the
+    statutory bonus, the rate times a joint filer's base amount.
+    """
+    base_amount = np.asarray(base_amount, dtype=float)
+    joint = np.asarray(joint, dtype=bool)
+    agi = np.asarray(agi, dtype=float)
+    threshold = np.where(joint, 250_000, 125_000)
+    phase_out = 0.2 * np.maximum(agi - threshold, 0)
+    with_bonus = np.maximum(base_amount * (1 + joint * bonus_rate) - phase_out, 0)
+    without_bonus = np.maximum(base_amount - phase_out, 0)
+    statutory = base_amount * joint * bonus_rate
+    return (
+        statutory - (with_bonus - without_bonus),
+        with_bonus
+        - without_bonus
+        - closed_form_bonus(base_amount, joint, agi, bonus_rate),
+    )
+
+
 def weighted_decile(
     income: np.ndarray, household_weight: np.ndarray, people: np.ndarray
 ) -> np.ndarray:

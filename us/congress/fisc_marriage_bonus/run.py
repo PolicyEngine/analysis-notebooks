@@ -1,0 +1,88 @@
+# /// script
+# requires-python = ">=3.12,<3.14"
+# dependencies = ["policyengine[models]==6.11.1"]
+# ///
+"""Run one FISC scenario for one year on the certified US dataset.
+
+    uv run us/congress/fisc_marriage_bonus/run.py fisc 2026 --out <work-dir>
+
+Each run holds one microsimulation in one process, and writes the household and
+tax-unit arrays to <work-dir>/<scenario>_<year>.npz. summarize.py reads those
+files. policyengine 6.11.1 pins policyengine-us 2.2.1 and the dataset
+hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-spm-20260915,
+the same bundle the production API runs. The dataset's weights and incomes
+extend to later years through the model's own uprating.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+import numpy as np
+from analysis import SCENARIOS
+from policyengine.tax_benefit_models.us import managed_microsimulation
+
+HOUSEHOLD_VARIABLES = (
+    "household_id",
+    "household_weight",
+    "household_count_people",
+    "household_net_income",
+    "equiv_household_net_income",
+    "household_income_decile",
+    "household_tax",
+    "household_benefits",
+)
+TAX_UNIT_VARIABLES = (
+    "tax_unit_id",
+    "tax_unit_weight",
+    "income_tax",
+    "adjusted_gross_income",
+)
+# The reform registers these two variables, so they exist only in reform runs.
+REFORM_ONLY_VARIABLES = (
+    "family_income_supplement_credit",
+    "family_income_supplement_credit_base_amount",
+)
+CURRENT_LAW_ONLY_VARIABLES = ("refundable_ctc", "non_refundable_ctc")
+
+
+def run(scenario: str, year: int, out: Path) -> Path:
+    policy = SCENARIOS[scenario]
+    sim = managed_microsimulation(reform=policy or None)
+
+    def calculate(variable: str, map_to: str | None = None) -> np.ndarray:
+        return np.asarray(sim.calculate(variable, period=year, map_to=map_to).values)
+
+    arrays = {f"household.{name}": calculate(name) for name in HOUSEHOLD_VARIABLES}
+    arrays |= {f"tax_unit.{name}": calculate(name) for name in TAX_UNIT_VARIABLES}
+    arrays["tax_unit.joint"] = calculate("filing_status") == "JOINT"
+    if not arrays["tax_unit.joint"].any():
+        raise ValueError("no joint filers: filing_status did not decode to names")
+
+    for name in REFORM_ONLY_VARIABLES if policy else CURRENT_LAW_ONLY_VARIABLES:
+        arrays[f"tax_unit.{name}"] = calculate(name, map_to="tax_unit")
+        arrays[f"household.{name}"] = calculate(name, map_to="household")
+
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / f"{scenario}_{year}.npz"
+    np.savez_compressed(path, **arrays)
+    bundle = dict(getattr(sim, "policyengine_bundle", {}))
+    (out / f"{scenario}_{year}.json").write_text(
+        json.dumps(
+            {"scenario": scenario, "year": year, "policy": policy, "bundle": bundle},
+            indent=2,
+            default=str,
+        )
+    )
+    return path
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("scenario", choices=sorted(SCENARIOS))
+    parser.add_argument("year", type=int)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args()
+    print(run(args.scenario, args.year, args.out))

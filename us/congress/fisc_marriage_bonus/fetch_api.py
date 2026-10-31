@@ -1,7 +1,8 @@
 """Fetch FISC Act comparisons from the production PolicyEngine API.
 
 Policy 76612 holds the FISC Act and policy 99021 holds the same reform with the
-marriage bonus at zero. Policy 2 is current law.
+marriage bonus at zero. Policy 2 is current law. Policies 99022 to 99025 hold the
+other single-provision variants in analysis.SCENARIOS, run for 2026.
 
     uv run python us/congress/fisc_marriage_bonus/fetch_api.py results/api
 
@@ -21,8 +22,20 @@ from pathlib import Path
 FISC = 76612
 FISC_NO_BONUS = 99021
 CURRENT_LAW = 2
-COMPARISONS = ((FISC, CURRENT_LAW), (FISC_NO_BONUS, CURRENT_LAW), (FISC, FISC_NO_BONUS))
+FISC_NO_NEWBORN_ADD_ON = 99022
+FISC_NO_PHASE_OUT = 99023
+FISC_NO_AGI_CAP = 99024
+FISC_CTC_REPEAL_ONLY = 99025
 YEARS = range(2026, 2036)
+COMPARISONS = (
+    (FISC, CURRENT_LAW, YEARS),
+    (FISC_NO_BONUS, CURRENT_LAW, YEARS),
+    (FISC, FISC_NO_BONUS, YEARS),
+    (FISC, FISC_NO_NEWBORN_ADD_ON, (2026,)),
+    (FISC, FISC_NO_PHASE_OUT, (2026,)),
+    (FISC, FISC_NO_AGI_CAP, (2026,)),
+    (FISC_CTC_REPEAL_ONLY, CURRENT_LAW, (2026,)),
+)
 API = "https://api.policyengine.org/us/economy"
 POLL_SECONDS = 60
 MAX_SECONDS = 4 * 3600
@@ -50,8 +63,8 @@ def main(out: Path) -> None:
     deadline = time.time() + MAX_SECONDS
     while time.time() < deadline:
         waiting = 0
-        for policy, baseline in COMPARISONS:
-            for year in YEARS:
+        for policy, baseline, years in COMPARISONS:
+            for year in years:
                 path = out / f"econ_{policy}_over_{baseline}_{year}.json"
                 if path.exists():
                     continue

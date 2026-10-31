@@ -40,6 +40,12 @@ SCENARIOS: dict[str, dict] = {
         f"{SUPPLEMENT}.phase_out.other[1].rate": {PERIOD: 0},
     },
     "fisc_no_agi_cap": {**FISC_POLICY, f"{SUPPLEMENT}.agi_fraction": {PERIOD: 1e9}},
+    "fisc_ctc_repeal_only": {
+        **FISC_POLICY,
+        f"{SUPPLEMENT}.amount.base[0].amount": {PERIOD: 0},
+        f"{SUPPLEMENT}.amount.base[1].amount": {PERIOD: 0},
+        f"{SUPPLEMENT}.amount.base[2].amount": {PERIOD: 0},
+    },
 }
 
 # The 2026 child tax credit schedule in the model the March 2025 run used, which

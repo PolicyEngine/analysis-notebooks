@@ -43,7 +43,7 @@ The bonus reaches 24.0 million tax units and 23.9 million of 124.6 million house
 
 Ranking on income adjusted for household size moves larger families down the distribution, so the bonus looks more concentrated at the bottom. On that ranking the bottom five deciles receive 61.9 percent of it and the top three 14.0 percent, against 50.1 percent and 22.9 percent above. `results/deciles_by_component_2026.csv` holds both rankings.
 
-Two things shape these rows. Parents at the bottom marry less: joint filers make up 38 percent of tax units with a child in decile 1 and 91 percent in decile 10. And the limits bite at each end. At 20 percent of joint filers' base amounts, the bonus would cost $40.9 billion. The phase-out removes $5.2 billion of that, nearly all of it in deciles 9 and 10, and the AGI cap removes $1.4 billion, mostly in decile 1.
+Two things shape these rows. Joint filers make up 38 percent of tax units with a child in decile 1 and 91 percent in decile 10. And the limits bite at each end. At 20 percent of joint filers' base amounts, the bonus would cost $40.9 billion. The phase-out removes $5.2 billion of that, nearly all of it in deciles 9 and 10, and the AGI cap removes $1.4 billion, mostly in decile 1.
 
 | Decile | Joint share of tax units with a child | Statutory bonus | Lost to the phase-out | Lost to the AGI cap | Bonus paid |
 |---|---|---|---|---|---|
@@ -104,7 +104,7 @@ Pending the March 2025 runs. `fisc_act_10_year_impact.csv` shows -$193.14B for 2
 
 **Deciles.** `household_income_decile` ranks households on household net income with no size adjustment, and each decile holds about a tenth of people. These tables rank every component on current-law income so that the rows compare. Percent of income divides by current-law household net income. Households with negative net income take their own row, which receives $9 of the bonus.
 
-**Gini.** The API's Gini matches household net income across households, with no equivalisation and with negative incomes left in, to within 0.00001 in every scenario. `summarize.py` checks this. The second measure takes equivalised household net income across people, with negative incomes at zero.
+**Gini.** The API's Gini matches household net income across households, with no equivalisation and with negative incomes left in, to within 0.00001 in all six scenarios that `summarize.py` compares. The second measure takes equivalised household net income across people, with negative incomes at zero.
 
 **Poverty.** The API reports poverty rates, and the model's `in_poverty` tests SPM unit net income against the SPM threshold.
 
@@ -115,7 +115,7 @@ Pending the March 2025 runs. `fisc_act_10_year_impact.csv` shows -$193.14B for 2
 | Equivalised Gini, concentration, joint shares, limits | Local microsimulation |
 | March 2025 comparison | Local rerun of the March 2025 stack |
 
-The local runs and the API use the same bundle. Local and API reform differences match to the dollar: both put the bonus at $34.285367915B of income tax in 2026. Local income tax levels sit a constant $0.33 billion below the API's in all three core scenarios, for a reason we have not traced, and decile means differ by at most $1.71, in deciles 7 to 10.
+The local runs and the API use the same bundle. Local and API reform differences match to the dollar in every scenario compared: both put the bonus at $34.285367915B of income tax in 2026, and the newborn, phase-out and AGI cap variants match at $8.8704B, -$37.5928B and -$4.3196B. Local income tax levels sit a constant $0.33 billion below the API's in all three core scenarios, and local net income sits $0.51 billion above it. Household counts, weights and child tax credit totals match exactly, so those do not explain the gap, and we have not traced its cause. It moves decile means by at most $1.71, in deciles 7 to 10.
 
 ## Versions
 
@@ -136,7 +136,7 @@ The local runs and the API use the same bundle. Local and API reform differences
 - The credit difference equals the income tax difference.
 - Local and API results agree on the bonus, the decile means and the Gini.
 
-`test_analysis.py` states the same properties for all inputs with Hypothesis, and `test_summarize.py` confirms each check fails on a run that breaks it.
+`test_analysis.py` states the formula and table properties for all inputs with Hypothesis. `test_summarize.py` confirms that the restored-run, rerun, unmarried-unit and closed-form checks fail on runs that break them, and that the decile rows sum to the aggregate.
 
 ## Caveats
 

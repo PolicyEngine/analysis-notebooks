@@ -6,6 +6,8 @@ results/.
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -38,6 +40,7 @@ from summarize import (
     income_tolerance,
     load,
     main,
+    reweighted_decade,
     rescaled_draws,
     sampling_spread,
     spm_unit_totals,
@@ -709,7 +712,7 @@ class TestMain:
         broken[CREDIT][1] += 1
         save(work, "fisc_restored_bonus", broken)
         with pytest.raises(AssertionError, match="restoring"):
-            main(work, rerun, work, work, work, work)
+            main(work, rerun, work, work, work, work, work, work, work)
         assert list(results.iterdir()) == []
 
     def test_a_nan_invariant_writes_nothing(self, runs, tmp_path, monkeypatch):
@@ -740,6 +743,8 @@ class TestMain:
             "bonus_reach",
             "versus_reeves",
             "data_comparison",
+            "reweighted_comparison",
+            "reweighted_decade",
             "deciles_by_data_file",
             "sampling_spread",
         ):
@@ -750,8 +755,65 @@ class TestMain:
         )
         monkeypatch.setattr(summarize, "agi_cap_provision", lambda *args: ({}, {}))
         with pytest.raises(ValueError, match="not JSON compliant"):
-            main(work, rerun, work, work, work, work)
+            main(work, rerun, work, work, work, work, work, work, work)
         assert list(results.iterdir()) == []
+
+
+class TestReweightedDecade:
+    @pytest.fixture
+    def decade(self, runs, tmp_path):
+        work, _ = runs
+        fisc = load(work, "fisc", PRIMARY_YEAR)
+        no_bonus = load(work, "fisc_no_bonus", PRIMARY_YEAR)
+        weight = fisc["tax_unit.tax_unit_weight"]
+        bonus = float(((fisc[CREDIT] - no_bonus[CREDIT]) * weight).sum())
+        folder = tmp_path / "decade"
+        folder.mkdir()
+
+        def save_year(year, amount, tax_change=None):
+            tax_change = -amount if tax_change is None else tax_change
+            totals = {
+                "fisc": {
+                    "family_income_supplement_credit": 100.0 + amount,
+                    "income_tax": 50.0 + tax_change,
+                },
+                "fisc_no_bonus": {
+                    "family_income_supplement_credit": 100.0,
+                    "income_tax": 50.0,
+                },
+            }
+            (folder / f"decade_{year}.json").write_text(
+                json.dumps({"year": year, "totals": totals})
+            )
+
+        for year in summarize.YEARS:
+            save_year(year, bonus)
+        return work, folder, bonus, save_year
+
+    def test_the_window_sums_each_year_and_starts_at_the_full_run(self, decade):
+        work, folder, bonus, _ = decade
+        table = reweighted_decade(folder, work)
+        assert table.loc[PRIMARY_YEAR, "bonus"] == pytest.approx(bonus)
+        assert table.loc["2026-2035", "bonus"] == pytest.approx(10 * bonus)
+        assert table.loc["2026-2035", "income_tax_change"] == pytest.approx(-10 * bonus)
+
+    def test_a_first_year_off_the_full_run_raises(self, decade):
+        work, folder, bonus, save_year = decade
+        save_year(PRIMARY_YEAR, bonus * 1.01)
+        with pytest.raises(AssertionError, match="disagree on 2026"):
+            reweighted_decade(folder, work)
+
+    def test_income_tax_that_misses_the_credit_raises(self, decade):
+        work, folder, bonus, save_year = decade
+        save_year(2030, bonus, tax_change=-0.9 * bonus)
+        with pytest.raises(AssertionError, match="income tax disagree"):
+            reweighted_decade(folder, work)
+
+    def test_a_missing_year_raises(self, decade):
+        work, folder, *_ = decade
+        (folder / "decade_2031.json").unlink()
+        with pytest.raises(FileNotFoundError):
+            reweighted_decade(folder, work)
 
 
 class TestBonusGapFromApi:

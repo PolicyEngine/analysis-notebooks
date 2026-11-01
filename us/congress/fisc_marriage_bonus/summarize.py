@@ -1309,6 +1309,46 @@ def reweighted_comparison(
     return pd.DataFrame(columns).rename_axis("line").reset_index()
 
 
+def reweighted_decade(folder: Path, full_year: Path) -> pd.DataFrame:
+    """Each year's bonus on one set of weights, from decade.py's two runs a year."""
+    rows = []
+    for year in YEARS:
+        totals = json.loads((folder / f"decade_{year}.json").read_text())["totals"]
+        fisc, no_bonus = totals["fisc"], totals["fisc_no_bonus"]
+        bonus = (
+            fisc["family_income_supplement_credit"]
+            - no_bonus["family_income_supplement_credit"]
+        )
+        income_tax = fisc["income_tax"] - no_bonus["income_tax"]
+        # Income tax and the credit share rounding only, so the gap stays small.
+        if abs(bonus + income_tax) > RELATIVE_TOLERANCE * abs(bonus):
+            raise AssertionError(f"{year}: the credit and income tax disagree")
+        rows.append(
+            {
+                "year": year,
+                "bonus": bonus,
+                "income_tax_change": income_tax,
+                "full_fisc_credit": fisc["family_income_supplement_credit"],
+            }
+        )
+    table = pd.DataFrame(rows).set_index("year")
+    first_year = load(full_year, "fisc", PRIMARY_YEAR)
+    in_the_full_run = float(
+        (
+            (
+                first_year[CREDIT]
+                - load(full_year, "fisc_no_bonus", PRIMARY_YEAR)[CREDIT]
+            )
+            * first_year["tax_unit.tax_unit_weight"]
+        ).sum()
+    )
+    gap = abs(table.loc[PRIMARY_YEAR, "bonus"] - in_the_full_run)
+    if gap > RELATIVE_TOLERANCE * in_the_full_run:
+        raise AssertionError("the decade run and the full run disagree on 2026")
+    table.loc["2026-2035"] = table.sum()
+    return table
+
+
 def check_the_answer_on_every_file(
     table: pd.DataFrame,
     labels: tuple[str, ...] = ("march_2025_data", "cps_2024_data", "todays_data"),
@@ -1405,6 +1445,7 @@ def main(
     detail: Path,
     reweighted: Path,
     reweighted_detailed: Path,
+    decade: Path,
 ) -> None:
     marker = RESULTS / "invariants.json"
     marker.unlink(missing_ok=True)
@@ -1437,7 +1478,11 @@ def main(
         [provision_comparison(), pd.DataFrame([agi_cap_row])],
         ignore_index=True,
     )
-    indexed = {"budget_by_year": budget_by_year(), "march_2025_comparison": years}
+    indexed = {
+        "budget_by_year": budget_by_year(),
+        "march_2025_comparison": years,
+        "reweighted_budget_by_year": reweighted_decade(decade, reweighted),
+    }
     plain = {
         "poverty_2026": poverty_effects(),
         "provisions_2026": provisions,
@@ -1476,6 +1521,7 @@ if __name__ == "__main__":
     parser.add_argument("--detail", type=Path, required=True)
     parser.add_argument("--reweighted", type=Path, required=True)
     parser.add_argument("--reweighted-detailed", type=Path, required=True)
+    parser.add_argument("--decade", type=Path, required=True)
     args = parser.parse_args()
     main(
         args.work,
@@ -1486,4 +1532,5 @@ if __name__ == "__main__":
         args.detail,
         args.reweighted,
         args.reweighted_detailed,
+        args.decade,
     )

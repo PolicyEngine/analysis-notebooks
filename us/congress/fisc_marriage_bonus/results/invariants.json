@@ -38,7 +38,10 @@
  "cps_2024_data_largest_household_gap_from_tax_and_benefits": 0.015625,
  "cps_2024_data_bonus_measured_by_the_credit": 29606567522.395966,
  "march_2025_data_gini_change_with_the_bonus": -0.0003706618751800894,
+ "march_2025_data_equivalised_gini_change_with_the_bonus": -0.000979240688616767,
  "cps_2024_data_gini_change_with_the_bonus": -0.00029599705045363356,
+ "cps_2024_data_equivalised_gini_change_with_the_bonus": -0.0012052317602260776,
  "todays_data_gini_change_with_the_bonus": -0.0007068382346433477,
+ "todays_data_equivalised_gini_change_with_the_bonus": -0.0015198399546119123,
  "agi_cap_largest_spm_unit_gap_from_taxes": 0.04638671875
 }

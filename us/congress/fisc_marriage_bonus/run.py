@@ -147,16 +147,15 @@ def run(
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"{scenario}_{year}.npz"
     np.savez_compressed(path, **arrays)
-    if people:
-        np.savez_compressed(
-            out / f"{scenario}_{year}_people.npz",
-            **{name: calculate(name) for name in PEOPLE_VARIABLES},
-        )
-    if detail:
-        np.savez_compressed(
-            out / f"{scenario}_{year}_detail.npz",
-            **{name: calculate(name) for name in DETAIL_VARIABLES},
-        )
+    for wanted, suffix, names in (
+        (people, "people", PEOPLE_VARIABLES),
+        (detail, "detail", DETAIL_VARIABLES),
+    ):
+        sidecar = out / f"{scenario}_{year}_{suffix}.npz"
+        # A rerun without the flag must not leave an older run's arrays behind.
+        sidecar.unlink(missing_ok=True)
+        if wanted:
+            np.savez_compressed(sidecar, **{name: calculate(name) for name in names})
     bundle = dict(getattr(sim, "policyengine_bundle", {}))
     (out / f"{scenario}_{year}.json").write_text(
         json.dumps(

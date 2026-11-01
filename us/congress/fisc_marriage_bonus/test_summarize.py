@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 import summarize
-from analysis import closed_form_credit
+from analysis import closed_form_credit, weighted_decile
 from summarize import (
     BASE,
     CREDIT,
@@ -75,7 +75,9 @@ def fake_run(rate: float, *, ctc: float = 0.0) -> dict[str, np.ndarray]:
         NET_INCOME: 0.9 * agi + credit + ctc,
         "household.equiv_household_net_income": (0.9 * agi + credit + ctc)
         / np.sqrt(2 + index % 3),
-        "household.household_income_decile": 1 + index % 10,
+        "household.household_income_decile": weighted_decile(
+            0.9 * agi + credit + ctc, np.full(N, 1_000.0), 2 + index % 3
+        ),
         "person.person_tax_unit_id": index,
         "person.person_household_id": index,
     }
@@ -430,8 +432,18 @@ class TestTablesAreFinite:
 
     def test_a_column_of_nones_fails(self):
         table = pd.DataFrame({"a": [None, None]}, dtype=object)
-        with pytest.raises(AssertionError, match="neither text nor number"):
+        with pytest.raises(AssertionError, match="not a number"):
             check_tables_are_finite({"table": table})
+
+    def test_a_number_saved_as_text_fails(self):
+        table = pd.DataFrame({"a": ["1.0", "inf"]})
+        with pytest.raises(AssertionError, match="not a number"):
+            check_tables_are_finite({"table": table})
+
+    def test_a_number_in_a_text_column_fails(self):
+        table = pd.DataFrame({"rung": ["start", 1.0]})
+        with pytest.raises(AssertionError, match="rung is not text"):
+            check_tables_are_finite({"march_2025_ladder": table})
 
     def test_a_decile_row_blanks_only_what_it_cannot_divide(self):
         table = pd.DataFrame(
@@ -528,6 +540,26 @@ class TestComparisonFile:
         with pytest.raises(AssertionError, match="differs between runs"):
             check_comparison_file(work, "file")
 
+    def test_a_swapped_baseline_decile_fails(self, runs):
+        work, _ = runs
+        current = fake_run(0.0, ctc=500.0)
+        deciles = current["household.household_income_decile"]
+        low, high = deciles.argmin(), deciles.argmax()
+        deciles[[low, high]] = deciles[[high, low]]
+        save(work, "baseline", current)
+        with pytest.raises(AssertionError, match="a saved decile misses its income"):
+            check_comparison_file(work, "file")
+
+    def test_a_baseline_equivalised_income_off_its_definition_fails(self, runs):
+        work, _ = runs
+        current = fake_run(0.0, ctc=500.0)
+        current["household.equiv_household_net_income"] = (
+            current["household.equiv_household_net_income"] + 10
+        )
+        save(work, "baseline", current)
+        with pytest.raises(AssertionError, match="equivalised income misses"):
+            check_comparison_file(work, "file")
+
     def test_net_income_with_no_credit_behind_it_fails(self, runs):
         work, _ = runs
         fisc = fake_run(0.2)
@@ -552,6 +584,13 @@ class TestIncomeTolerance:
             run = fake_run(rate, ctc=ctc)
             run[NET_INCOME][0] = income
             run["household.household_weight"][0] = 0.001
+            people = run["household.household_count_people"]
+            run["household.equiv_household_net_income"] = run[NET_INCOME] / np.sqrt(
+                people
+            )
+            run["household.household_income_decile"] = weighted_decile(
+                run[NET_INCOME], run["household.household_weight"], people
+            )
             save(work, scenario, run)
 
     def test_a_rounding_step_at_a_very_large_income_passes(self, runs):
@@ -564,6 +603,14 @@ class TestIncomeTolerance:
         self.save_a_rich_household(work, 40.0)
         with pytest.raises(AssertionError, match="tax and benefits"):
             check_comparison_file(work, "file")
+
+    def test_a_saved_equivalised_income_may_round_at_a_very_large_income(self, runs):
+        work, _ = runs
+        self.save_a_rich_household(work, 24.0)
+        current = load(work, "baseline", PRIMARY_YEAR)
+        current["household.equiv_household_net_income"][0] += 8.0
+        save(work, "baseline", current)
+        check_comparison_file(work, "file")
 
     def test_a_dollar_holds_at_ordinary_incomes(self):
         run = fake_run(0.2)
@@ -809,6 +856,8 @@ class TestDataComparison:
         lines = {
             "gini_with_the_bonus": 0.46,
             "gini_without_the_bonus": 0.47,
+            "equivalised_gini_with_the_bonus": 0.44,
+            "equivalised_gini_without_the_bonus": 0.45,
             "bonus_concentration": 0.1,
             "household_income_gini": 0.47,
             "equivalised_income_gini": 0.45,

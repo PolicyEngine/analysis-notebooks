@@ -140,6 +140,8 @@ The same model and reform ran on three files. Each ranks households within its o
 | Bottom five deciles' share of the rest of the credit, equivalised income | 61.0% | 64.7% | 71.0% | |
 | Gini without the bonus | 0.53462 | 0.44640 | 0.47012 | |
 | Gini with the bonus | 0.53425 | 0.44611 | 0.46942 | |
+| Equivalised Gini without the bonus | 0.50000 | 0.40352 | 0.44545 | |
+| Equivalised Gini with the bonus | 0.49902 | 0.40231 | 0.44393 | |
 | Bonus concentration, household income | +0.262 | +0.257 | +0.066 | |
 | Rest of the credit, household income | +0.124 | +0.135 | -0.075 | |
 | Bonus concentration, equivalised income | -0.027 | -0.091 | -0.184 | |
@@ -208,8 +210,8 @@ The local runs and the API use the same bundle. Local and API reform differences
 - The bonus measured by income tax and by net income each sit within 0.1 percent of the bonus measured by the credit.
 - The `fisc_no_agi_cap` credit equals the uncapped formula at every AGI, and that run pays credit at zero and negative AGI.
 - Local and API results agree on the bonus in 2026 and 2035, the decile means and totals, the Gini in seven scenarios, and the poverty rates, within the tolerances `summarize.py` states.
-- Every saved array holds finite numbers, and saved equivalised income equals net income over the square root of household size.
-- Every table cell holds text or a finite number. Blanks fall only in the cells each table leaves empty, and `invariants.json` refuses a NaN before any table reaches disk.
+- Every saved array holds finite numbers. On each data file, saved deciles match a fresh person-weighted ranking of net income, and saved equivalised income equals net income over the square root of household size to within a dollar plus two single-precision steps.
+- Text columns hold text and every other column holds finite numbers. Blanks fall only in the cells each table leaves empty, and `invariants.json` refuses a NaN before any table reaches disk.
 - The runs that saved the detail arrays match the runs in the work folder, array for array.
 - Each household's net income moves by its rebuilt credit less its rebuilt state income tax, to within a dollar. State income tax moves only for tax units whose credit moves, and its total matches the API's.
 - With the AGI cap and without it, each person's poverty flag matches their SPM unit's income and threshold, the thresholds match, and each SPM unit's income moves by its members' federal and state income tax changes, with each tax unit counted in its head's SPM unit as the model counts it. Nobody enters poverty when the cap goes, someone leaves it, and the rates fall at or below the API's partial removal.
@@ -234,7 +236,8 @@ The local runs and the API use the same bundle. Local and API reform differences
 - The bill creates a payment from the Social Security Administration and says nothing about means-tested benefits. The model treats the payment as a refundable income tax credit and moves no benefit, so these runs do not show whether the payment would change benefits.
 - We have not put a dollar figure on any of these substitutions.
 - The model pays $8,000 for a child under 1: $4,800 for twelve months at $400, and $3,200 for four months at $800 as a stand-in for pregnancy. The bill pays $800 a month once a pregnancy has lasted at least 20 weeks and starts the child's payment after the month of birth. The model has no separate count of pregnancies.
-- The bill takes effect at least a year after enactment, prorates the child tax credit in the first taxable year of payments and repeals it for later years. These runs apply the payment and the repeal to all of 2026.
+- The bill takes effect at least a year after enactment. Section 3(c)(2) prorates the child tax credit only if payments begin after the first taxable year starts, and section 3(c)(1) repeals the credit for later taxable years. Section 3(c)(1) cites a section 2(l) that the introduced text lacks, and we read it as the effective date in section 2(k). These runs apply the payment and the repeal to all of 2026.
+- Section 3(a) strikes all of section 24 of the Internal Revenue Code, and the reform neutralizes `refundable_ctc` and `non_refundable_ctc`. The repeal therefore ends the $500 credit for other dependents along with the $2,200 child tax credit.
 - The current dataset calibrates a pool of CPS ASEC records to 2024 targets, and the model uprates incomes and scales weights to reach later years. From 2026 to 2035 every record keeps its ages, family structure, filing status and base amount, and every weight grows by 3.35 percent, so the decade holds no cohort aging and no change in family structure.
 - The bonus and its distribution depend on how many parents file jointly, and the three data files put that share of base amounts at 54, 69 and 72 percent. The 2026 estimate moves by $9 billion across them, and the bottom five deciles' share by 14 percentage points. The spread measures sensitivity to the file and sets no uncertainty range.
 - The ten-year figures and the poverty rates come from the current dataset alone.

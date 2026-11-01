@@ -522,6 +522,7 @@ def check_comparison_file(folder: Path, label: str) -> dict:
     fisc = load(folder, "fisc", PRIMARY_YEAR)
     no_bonus = load(folder, "fisc_no_bonus", PRIMARY_YEAR)
     check_same_records(current, fisc, label)
+    check_saved_ranking(current, label)
     credit_gaps_from_the_bill(fisc, STATUTORY_BONUS_RATE)
     credit_gaps_from_the_bill(no_bonus, 0.0)
     results = check_two_runs(fisc, no_bonus, label)
@@ -553,6 +554,7 @@ def check_agi_cap_run(work: Path, detail: Path) -> dict:
     """The uncapped run must pay the uncapped credit at every AGI."""
     fisc = load(work, "fisc", PRIMARY_YEAR)
     uncapped = load(work, "fisc_no_agi_cap", PRIMARY_YEAR)
+    check_saved_ranking(uncapped, "the uncapped run")
     expected = uncapped_credit(
         uncapped[BASE],
         uncapped["tax_unit.joint"].astype(bool),
@@ -583,6 +585,7 @@ def check_invariants(work: Path, rerun: Path, detail: Path) -> dict:
     joint = fisc["tax_unit.joint"].astype(bool)
     bonus = fisc[CREDIT] - no_bonus[CREDIT]
     results: dict[str, object] = {}
+    check_saved_ranking(load(work, "baseline", PRIMARY_YEAR), "today's data")
 
     for name in fisc:
         if not np.array_equal(fisc[name], restored[name]):
@@ -787,9 +790,21 @@ def equivalised_income(run: dict[str, np.ndarray]) -> np.ndarray:
     """The saved equivalised income, checked against its definition."""
     income = run["household.equiv_household_net_income"]
     expected = run[NET_INCOME] / np.sqrt(run["household.household_count_people"])
-    if np.abs(income - expected).max() > DOLLAR_TOLERANCE:
+    if (np.abs(income - expected) > income_tolerance(run)).any():
         raise AssertionError("equivalised income misses net income and household size")
     return income
+
+
+def check_saved_ranking(run: dict[str, np.ndarray], label: str) -> None:
+    """A run's saved deciles and equivalised income must follow from its income."""
+    equivalised_income(run)
+    deciles = weighted_decile(
+        run[NET_INCOME],
+        run["household.household_weight"],
+        run["household.household_count_people"],
+    )
+    if not np.array_equal(deciles, run["household.household_income_decile"]):
+        raise AssertionError(f"{label}: a saved decile misses its income")
 
 
 def equivalised_gini(run: dict[str, np.ndarray]) -> float:
@@ -1146,6 +1161,8 @@ def distribution_lines(folder: Path) -> dict:
         "gini_without_the_bonus": household_gini(no_bonus),
         "gini_with_the_bonus": household_gini(fisc),
         "equivalised_income_gini": weighted_gini(adjusted, person_weight),
+        "equivalised_gini_without_the_bonus": equivalised_gini(no_bonus),
+        "equivalised_gini_with_the_bonus": equivalised_gini(fisc),
     }
     adjusted_decile = weighted_decile(adjusted, weight, people)
     for name, amount in pieces.items():
@@ -1283,8 +1300,12 @@ def check_the_answer_on_every_file(table: pd.DataFrame) -> dict:
         column = lines[label].dropna()
         if len(column) < len(lines[label]) or not np.isfinite(column).all():
             raise AssertionError(f"{label}: a line is not finite")
-        if column["gini_with_the_bonus"] >= column["gini_without_the_bonus"]:
-            raise AssertionError(f"{label}: the bonus does not narrow the Gini")
+        for gini in ("gini", "equivalised_gini"):
+            if column[f"{gini}_with_the_bonus"] >= column[f"{gini}_without_the_bonus"]:
+                raise AssertionError(f"{label}: the bonus does not narrow the Gini")
+            results[f"{label}_{gini}_change_with_the_bonus"] = float(
+                column[f"{gini}_with_the_bonus"] - column[f"{gini}_without_the_bonus"]
+            )
         for income_gini, suffix in (
             ("household_income_gini", ""),
             ("equivalised_income_gini", "_equivalised"),
@@ -1299,10 +1320,22 @@ def check_the_answer_on_every_file(table: pd.DataFrame) -> dict:
                 >= column[f"rest_of_credit_share_of_bottom_five_deciles{suffix}"]
             ):
                 raise AssertionError(f"{label}: the bonus reaches lower than the rest")
-        results[f"{label}_gini_change_with_the_bonus"] = float(
-            column["gini_with_the_bonus"] - column["gini_without_the_bonus"]
-        )
     return results
+
+
+TEXT_COLUMNS = {
+    "component_summary_2026": {"ranking", "component"},
+    "cps_sampling_spread_2026": {"line"},
+    "data_comparison_2026": {"line"},
+    "deciles_by_component_2026": {"ranking", "component"},
+    "deciles_by_data_file_2026": {"data_file"},
+    "gini_by_provision_2026": {"provision"},
+    "march_2025_ladder": {"rung"},
+    "march_2025_step_orders": {"step"},
+    "poverty_2026": {"comparison", "group"},
+    "provisions_2026": {"provision", "path"},
+    "versus_reeves_estimate": {"line"},
+}
 
 
 def expected_blanks(name: str, table: pd.DataFrame) -> pd.DataFrame:
@@ -1329,10 +1362,12 @@ def check_tables_are_finite(tables: dict[str, pd.DataFrame]) -> None:
         blanks = expected_blanks(name, table)
         for column in table.columns:
             cells = table[column]
-            if not pd.api.types.is_numeric_dtype(cells):
+            if column in TEXT_COLUMNS.get(name, ()):
                 if not cells.map(lambda cell: isinstance(cell, str)).all():
-                    raise AssertionError(f"{name}: {column} is neither text nor number")
+                    raise AssertionError(f"{name}: {column} is not text")
                 continue
+            if not pd.api.types.is_numeric_dtype(cells):
+                raise AssertionError(f"{name}: {column} is not a number")
             numbers = cells.to_numpy(dtype=float)
             if np.isinf(numbers).any():
                 raise AssertionError(f"{name}: a cell in {column} is not finite")

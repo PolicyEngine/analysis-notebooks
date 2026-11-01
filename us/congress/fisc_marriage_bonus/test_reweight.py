@@ -11,10 +11,14 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from reweight import (
+    MARRIED_OWN_CHILD_FAMILIES_BY_INCOME,
     apply_weight_factors,
+    calibrate,
     entropy_balance,
+    family_income_moments,
     household_moments,
     household_position,
+    published_targets,
 )
 
 
@@ -60,6 +64,71 @@ def test_a_married_grandparent_counts_the_child_of_a_single_parent_in_the_home()
     assert moments["children_in_married_couple_households"].tolist() == [0, 2]
     # The own-child count looks only at the head's tax unit.
     assert moments["married_couple_households_with_own_child"].tolist() == [0, 1]
+
+
+def test_income_bands_split_married_households_with_a_child_and_no_others():
+    moments = household_moments(small_run())
+    bands = family_income_moments(moments)
+    assert sum(bands.values()).tolist() == (
+        moments["married_couple_households_with_own_child"].tolist()
+    )
+    assert bands["married_own_child_income_under_25000"].tolist() == [0, 1, 0]
+
+
+def test_the_income_solve_swaps_the_family_total_for_its_bands():
+    moments = household_moments(small_run())
+    moments |= family_income_moments(moments)
+    weights = np.array([2.0, 3.0, 4.0])
+    targets = published_targets(moments, weights, by_income=True)
+    assert "married_couple_households_with_own_child" not in targets
+    published = [item[3] for item in MARRIED_OWN_CHILD_FAMILIES_BY_INCOME]
+    bands = [item[0] for item in MARRIED_OWN_CHILD_FAMILIES_BY_INCOME]
+    assert [targets[f"married_own_child_income_{b}"] for b in bands] == published
+
+
+def many_households(size: int = 3000) -> dict[str, np.ndarray]:
+    """Made-up households with every mix of marriage, children, age and income.
+
+    The weights set about 268 million people, which leaves the 132.7 million
+    households, 62 million couples and 72.5 million children room to fit.
+    """
+    generator = np.random.default_rng(3)
+    married = generator.random(size) < 0.5
+    children = generator.integers(0, 4, size)
+    elderly = generator.random(size) < 0.2
+    people = 1 + married + children
+    home = np.repeat(np.arange(size), people)
+    head = np.concatenate([[0], np.cumsum(people)[:-1]])
+    age = generator.integers(0, 18, people.sum())
+    age[head] = np.where(elderly, 70, 40)
+    spouses = head[married] + 1
+    age[spouses] = 40
+    is_head = np.zeros(people.sum(), dtype=bool)
+    is_head[head] = True
+    adult = is_head.copy()
+    adult[spouses] = True
+    return {
+        "household.household_id": np.arange(size),
+        "household.household_weight": generator.uniform(1.5e4, 4.5e4, size),
+        "tax_unit.tax_unit_id": np.arange(size),
+        "tax_unit.filing_status": np.where(married, "JOINT", "SINGLE"),
+        "tax_unit.adjusted_gross_income": generator.choice(
+            [1e4, 4e4, 8e4, 1.5e5, 3e5], size
+        ),
+        "tax_unit.income_tax": generator.uniform(0, 1e4, size),
+        "person.person_household_id": home,
+        "person.person_tax_unit_id": home,
+        "person.age": age,
+        "person.is_household_head": is_head,
+        "person.is_tax_unit_dependent": ~adult,
+    }
+
+
+def test_a_solve_with_income_bands_hits_every_target_on_many_records():
+    result = calibrate(many_households(), by_income=True)
+    for name, target in result.targets.items():
+        assert result.after[name] == pytest.approx(target, rel=1e-6)
+    assert (result.factors > 0).all()
 
 
 class FakeSimulation:

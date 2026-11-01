@@ -23,7 +23,12 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from reweight import household_moments, household_position
+from reweight import (
+    MARRIED_OWN_CHILD_FAMILIES_BY_INCOME,
+    family_income_moments,
+    household_moments,
+    household_position,
+)
 
 RESULTS = Path(__file__).parent / "results"
 
@@ -146,6 +151,10 @@ BENCHMARKS = (
         Benchmark(f"joint_filers_agi_{label}", returns, "soi_12")
         for label, _, _, returns in JOINT_RETURNS_BY_AGI
     ),
+    *(
+        Benchmark(f"married_own_child_income_{label}", families, "acs", "B19131")
+        for label, _, _, families in MARRIED_OWN_CHILD_FAMILIES_BY_INCOME
+    ),
 )
 
 
@@ -232,6 +241,10 @@ def measures(run: dict[str, np.ndarray]) -> dict[str, float]:
                 joint_column & filer & (income >= low) & (income < high), unit_weight
             )
             for label, low, high, _ in JOINT_RETURNS_BY_AGI
+        },
+        **{
+            name: float(household_weight @ families)
+            for name, families in family_income_moments(in_households).items()
         },
     }
 

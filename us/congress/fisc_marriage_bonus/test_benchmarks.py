@@ -10,7 +10,13 @@ from itertools import pairwise
 
 import numpy as np
 import pytest
-from benchmarks import BENCHMARKS, JOINT_RETURNS_BY_AGI, benchmark_table, measures
+from benchmarks import (
+    BENCHMARKS,
+    JOINT_RETURNS_BY_AGI,
+    MARRIED_OWN_CHILD_FAMILIES_BY_INCOME,
+    benchmark_table,
+    measures,
+)
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -95,6 +101,24 @@ def test_the_published_bands_add_to_the_published_total():
     bands = sum(item[3] for item in JOINT_RETURNS_BY_AGI)
     # Table 1.2 rounds each row of its joint column, so the sum can miss by one.
     assert abs(bands - 54_568_939) <= 2
+
+
+def test_the_published_family_bands_add_to_the_published_total():
+    assert sum(item[3] for item in MARRIED_OWN_CHILD_FAMILIES_BY_INCOME) == 22_978_636
+
+
+def test_family_income_bands_hold_each_married_household_with_a_child_once():
+    result = measures(small_run())
+    bands = [
+        f"married_own_child_income_{item[0]}"
+        for item in MARRIED_OWN_CHILD_FAMILIES_BY_INCOME
+    ]
+    assert (
+        sum(result[name] for name in bands)
+        == result["married_couple_households_with_own_child"]
+    )
+    # The couple's $120,000 and the lodger's $9,000 share one household.
+    assert result["married_own_child_income_100000_to_200000"] == 2
 
 
 def test_every_benchmark_names_a_measure_the_run_produces():

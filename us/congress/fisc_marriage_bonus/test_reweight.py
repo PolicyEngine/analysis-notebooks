@@ -89,14 +89,15 @@ def test_the_income_solve_swaps_the_family_total_for_its_bands():
 def many_households(size: int = 3000) -> dict[str, np.ndarray]:
     """Made-up households with every mix of marriage, children, age and income.
 
-    The weights set about 268 million people, which leaves the 132.7 million
-    households, 62 million couples and 72.5 million children room to fit.
+    Heads, spouses and children alone would tie the people count to the household,
+    couple and child targets, so some households also hold another adult.
     """
     generator = np.random.default_rng(3)
     married = generator.random(size) < 0.5
     children = generator.integers(0, 4, size)
     elderly = generator.random(size) < 0.2
-    people = 1 + married + children
+    other_adult = generator.random(size) < 0.3
+    people = 1 + married + children + other_adult
     home = np.repeat(np.arange(size), people)
     head = np.concatenate([[0], np.cumsum(people)[:-1]])
     age = generator.integers(0, 18, people.sum())
@@ -107,6 +108,9 @@ def many_households(size: int = 3000) -> dict[str, np.ndarray]:
     is_head[head] = True
     adult = is_head.copy()
     adult[spouses] = True
+    last = head + people - 1
+    age[last[other_adult]] = 30
+    adult[last[other_adult]] = True
     return {
         "household.household_id": np.arange(size),
         "household.household_weight": generator.uniform(1.5e4, 4.5e4, size),

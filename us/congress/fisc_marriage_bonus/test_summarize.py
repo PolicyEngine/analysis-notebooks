@@ -19,6 +19,7 @@ from summarize import (
     bonus_gap_from_api,
     bonus_reach,
     check_invariants,
+    data_comparison,
     distribution,
     gini_by_provision,
     versus_reeves,
@@ -230,6 +231,15 @@ class TestGiniByProvision:
         table = gini_by_provision(work).set_index("provision")
         assert len(table) == 7
         assert table.net_income_change["marriage_bonus"] > 0
+
+
+class TestDataComparison:
+    def test_each_file_reports_the_bonus_within_its_statutory_bound(self, runs):
+        work, _ = runs
+        table = data_comparison(work, work).set_index("line")
+        for column in ("march_2025_data", "todays_data"):
+            assert table[column]["bonus"] <= table[column]["statutory_bonus"] + 1
+            assert 0 < table[column]["joint_share_of_base_amount"] < 1
 
 
 class TestVersusReeves:

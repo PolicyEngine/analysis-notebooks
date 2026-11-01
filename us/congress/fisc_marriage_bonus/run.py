@@ -20,6 +20,7 @@ import argparse
 import json
 from pathlib import Path
 
+import h5py
 import numpy as np
 from policyengine.tax_benefit_models.us import managed_microsimulation
 
@@ -53,10 +54,29 @@ REFORM_ONLY_VARIABLES = (
 CURRENT_LAW_ONLY_VARIABLES = ("refundable_ctc", "non_refundable_ctc")
 
 
+def without_saved_spm_outputs(dataset: str, out: Path) -> str:
+    """Copy an older dataset without the saved outputs this model refuses to load.
+
+    The reconciliation reads income tax, which takes none of these as an input.
+    """
+    from policyengine_us.spm import REJECTED_DATASET_INPUTS
+
+    out.mkdir(parents=True, exist_ok=True)
+    copy = out / Path(dataset).name
+    if not copy.exists():
+        with h5py.File(dataset) as source, h5py.File(copy, "w") as target:
+            for name in source:
+                if name not in REJECTED_DATASET_INPUTS:
+                    source.copy(name, target)
+    return str(copy)
+
+
 def run(scenario: str, year: int, out: Path, dataset: str | None = None) -> Path:
     policy = SCENARIOS[scenario]
     source = (
-        {"dataset": dataset, "allow_unmanaged": True} if dataset is not None else {}
+        {"dataset": without_saved_spm_outputs(dataset, out), "allow_unmanaged": True}
+        if dataset is not None
+        else {}
     )
     sim = managed_microsimulation(reform=policy or None, **source)
 

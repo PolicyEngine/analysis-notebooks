@@ -1,0 +1,13 @@
+line,value
+reeves_estimate,30000000000.0
+base_that_estimate_implies_at_20_percent,150000000000.0
+base_amount_all_filers,284320546471.5929
+base_amount_joint_filers,204508293362.35208
+joint_share_of_base_amount,0.7192877753658403
+twenty_percent_of_joint_base_amount,40901658672.47042
+credit_without_bonus_all_filers,244303784941.50897
+credit_without_bonus_joint_filers,170345292256.82477
+joint_share_of_credit_without_bonus,0.6972683304829219
+twenty_percent_of_joint_credit,34069058451.364956
+modelled_bonus,34285367924.35341
+modelled_bonus_less_reeves_estimate,4285367924.353409

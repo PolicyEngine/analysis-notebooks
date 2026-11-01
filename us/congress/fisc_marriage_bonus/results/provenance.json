@@ -1,0 +1,37 @@
+{
+ "bundle_id": "us-6.11.1",
+ "certified_by": null,
+ "certified_data_artifact_sha256": "6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84",
+ "certified_data_build_id": "populace-us-2024-spm-20260915",
+ "compatibility_basis": "exact_build_model_version",
+ "country_id": "us",
+ "data_build_fingerprint": null,
+ "data_build_model_git_sha": null,
+ "data_build_model_version": "2.2.1",
+ "data_package": "microcosm-data",
+ "data_version": "0.1.0",
+ "default_dataset": "populace_us_2024",
+ "default_dataset_uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-spm-20260915",
+ "legacy_input_renames": {
+  "would_claim_wic": "takes_up_wic_if_eligible"
+ },
+ "managed_by": "policyengine.py",
+ "model_package": "policyengine-us",
+ "model_version": "2.2.1",
+ "policyengine_version": "6.11.1",
+ "runtime_dataset": "populace_us_2024",
+ "runtime_dataset_data_package": "microcosm-data",
+ "runtime_dataset_repo_type": "dataset",
+ "runtime_dataset_revision": "populace-us-2024-spm-20260915",
+ "runtime_dataset_sha256": "6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84",
+ "runtime_dataset_source": "data/populace_us_2024.h5",
+ "runtime_dataset_uri": "hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-spm-20260915",
+ "spm": {
+  "as_of": null,
+  "county_vintage": "2020",
+  "forecast_content_sha256": "3d86d5c4c0423480e6b69b75d222ffa4a7a2639e4094df5ba2504af01be17173",
+  "geography_id": null,
+  "geography_kind": "county",
+  "scenario": "ce_trend"
+ }
+}

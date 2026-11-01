@@ -513,7 +513,9 @@ def versus_reeves(work: Path) -> pd.DataFrame:
     return pd.Series(rows, name="value").rename_axis("line").reset_index()
 
 
-def reconciliation(march: Path, ecps: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+def reconciliation(
+    march: Path, ecps: Path, work: Path
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     published = pd.read_csv(MARCH_2025_CSV, index_col=0)["Static Impact"]
 
     def stack(year: int, scenario: str) -> dict:
@@ -541,15 +543,17 @@ def reconciliation(march: Path, ecps: Path) -> tuple[pd.DataFrame, pd.DataFrame]
             }
         )
     table = pd.DataFrame(rows).set_index("year")
+    gap = (table.march_2025_stack - table.published_csv).abs().max()
+    if gap > DOLLAR_TOLERANCE * 1e3:
+        raise AssertionError("the March 2025 rerun misses the published CSV")
 
-    tax = "tax_unit.income_tax"
-    full = weighted_sum(load(ecps, "fisc", PRIMARY_YEAR), tax)
-    zero = weighted_sum(load(ecps, "fisc_no_bonus", PRIMARY_YEAR), tax)
-    old_ctc = weighted_sum(load(ecps, "baseline_march_2025_ctc", PRIMARY_YEAR), tax)
-    new_ctc = weighted_sum(load(ecps, "baseline", PRIMARY_YEAR), tax)
+    def tax(folder: Path, scenario: str) -> float:
+        return weighted_sum(load(folder, scenario, PRIMARY_YEAR), "tax_unit.income_tax")
+
+    old_data_old_ctc = tax(ecps, "fisc") - tax(ecps, "baseline_march_2025_ctc")
+    old_data_new_ctc = tax(ecps, "fisc") - tax(ecps, "baseline")
+    new_data_old_ctc = tax(work, "fisc") - tax(work, "baseline_march_2025_ctc")
     start = table.loc[PRIMARY_YEAR, "march_2025_stack"]
-    model_step = full - old_ctc
-    baseline_step = full - new_ctc
     final = table.loc[PRIMARY_YEAR, "today"]
     ladder = pd.DataFrame(
         [
@@ -557,20 +561,63 @@ def reconciliation(march: Path, ecps: Path) -> tuple[pd.DataFrame, pd.DataFrame]
             ("March 2025 model, data and law, rerun", start, np.nan),
             (
                 "today's model, March 2025 data, March 2025 CTC",
-                model_step,
-                model_step - start,
+                old_data_old_ctc,
+                old_data_old_ctc - start,
             ),
             (
                 "today's model, March 2025 data, today's CTC",
-                baseline_step,
-                baseline_step - model_step,
+                old_data_new_ctc,
+                old_data_new_ctc - old_data_old_ctc,
             ),
-            ("today's model, today's data, today's CTC", final, final - baseline_step),
+            (
+                "today's model, today's data, today's CTC",
+                final,
+                final - old_data_new_ctc,
+            ),
         ],
         columns=["rung", "full_fisc_income_tax_2026", "step"],
     )
-    ladder.attrs["ecps_bonus"] = full - zero
-    return table, ladder
+    # The data and baseline steps interact, so the order changes each one's size.
+    orders = pd.DataFrame(
+        [
+            {
+                "step": "CTC baseline",
+                "with_march_2025_data": old_data_new_ctc - old_data_old_ctc,
+                "with_todays_data": final - new_data_old_ctc,
+            },
+            {
+                "step": "data",
+                "with_march_2025_data": final - old_data_new_ctc,
+                "with_todays_data": new_data_old_ctc - old_data_old_ctc,
+            },
+        ]
+    )
+    return table, ladder, orders
+
+
+def data_comparison(ecps: Path, work: Path) -> pd.DataFrame:
+    """The same model and reform on each data file, for the bonus and its base."""
+    columns = {}
+    for label, folder in (("march_2025_data", ecps), ("todays_data", work)):
+        fisc = load(folder, "fisc", PRIMARY_YEAR)
+        no_bonus = load(folder, "fisc_no_bonus", PRIMARY_YEAR)
+        weight = no_bonus["tax_unit.tax_unit_weight"]
+        joint = no_bonus["tax_unit.joint"].astype(bool)
+        base = no_bonus[BASE]
+        joint_base = float((base * weight)[joint].sum())
+        columns[label] = {
+            "tax_units": float(weight.sum()),
+            "joint_tax_units": float(weight[joint].sum()),
+            "tax_units_with_a_child": float(weight[base > 0].sum()),
+            "joint_tax_units_with_a_child": float(weight[(base > 0) & joint].sum()),
+            "base_amount": float((base * weight).sum()),
+            "joint_base_amount": joint_base,
+            "joint_share_of_base_amount": joint_base / float((base * weight).sum()),
+            "statutory_bonus": STATUTORY_BONUS_RATE * joint_base,
+            "bonus": float(((fisc[CREDIT] - no_bonus[CREDIT]) * weight).sum()),
+            "credit": float((fisc[CREDIT] * weight).sum()),
+        }
+    return pd.DataFrame(columns).rename_axis("line").reset_index()
 
 
 def main(work: Path, rerun: Path, march: Path, ecps: Path) -> None:
@@ -583,12 +630,13 @@ def main(work: Path, rerun: Path, march: Path, ecps: Path) -> None:
     gini_by_provision(work).to_csv(RESULTS / "gini_by_provision_2026.csv", index=False)
     bonus_reach(work).to_csv(RESULTS / "bonus_reach_2026.csv", index=False)
     versus_reeves(work).to_csv(RESULTS / "versus_reeves_estimate.csv", index=False)
-    years, ladder = reconciliation(march, ecps)
+    years, ladder, orders = reconciliation(march, ecps, work)
     years.to_csv(RESULTS / "march_2025_comparison.csv")
     ladder.to_csv(RESULTS / "march_2025_ladder.csv", index=False)
-    invariants["bonus_on_march_2025_data_with_todays_model"] = ladder.attrs[
-        "ecps_bonus"
-    ]
+    orders.to_csv(RESULTS / "march_2025_step_orders.csv", index=False)
+    data_comparison(ecps, work).to_csv(
+        RESULTS / "data_comparison_2026.csv", index=False
+    )
     (RESULTS / "invariants.json").write_text(json.dumps(invariants, indent=1))
     provenance = json.loads((work / f"fisc_{PRIMARY_YEAR}.json").read_text())["bundle"]
     (RESULTS / "provenance.json").write_text(

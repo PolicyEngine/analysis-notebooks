@@ -1,0 +1,7 @@
+comparison,group,baseline_rate,reform_rate
+full_fisc_over_current_law,all,0.13861915158291285,0.11310526919639982
+full_fisc_over_current_law,child,0.1801645318438677,0.11453224378160226
+fisc_no_bonus_over_current_law,all,0.13861915158291285,0.11676626927938599
+fisc_no_bonus_over_current_law,child,0.1801645318438677,0.12361060900373866
+bonus_over_fisc_no_bonus,all,0.11676626927938599,0.11310526919639982
+bonus_over_fisc_no_bonus,child,0.12361060900373866,0.11453224378160226

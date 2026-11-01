@@ -4,7 +4,7 @@
 # ///
 """Compare each data file with published counts that do not tabulate the CPS.
 
-    uv run us/congress/fisc_marriage_bonus/benchmarks.py <name>=<work-dir> ...
+    uv run us/congress/fisc_marriage_bonus/benchmarks.py <name>=<work-dir>[,<factors.npz>] ...
 
 Census table C3 tabulates the CPS, so a CPS-based file agreeing with it tests
 nothing. These rows use the IRS, the American Community Survey and the Census
@@ -292,12 +292,41 @@ def load_run(work: Path) -> dict[str, np.ndarray]:
         return {name: saved[name] for name in saved.files}
 
 
+def with_weight_factors(
+    run: dict[str, np.ndarray], factors: np.ndarray
+) -> dict[str, np.ndarray]:
+    """The same run at reweighted households, which carry their tax units along."""
+    unit_row = household_position(
+        run["tax_unit.tax_unit_id"], run["person.person_tax_unit_id"]
+    )
+    household_row = household_position(
+        run["household.household_id"], run["person.person_household_id"]
+    )
+    unit_household = np.zeros(run["tax_unit.tax_unit_id"].size, dtype=int)
+    unit_household[unit_row] = household_row
+    return run | {
+        "household.household_weight": run["household.household_weight"] * factors,
+        "tax_unit.tax_unit_weight": run["tax_unit.tax_unit_weight"]
+        * factors[unit_household],
+    }
+
+
+def load_file(spec: str) -> tuple[str, dict[str, np.ndarray]]:
+    """Read name=work-dir, or name=work-dir,factors.npz for reweighted runs."""
+    name, paths = spec.split("=", 1)
+    work, _, factors = paths.partition(",")
+    run = load_run(Path(work))
+    if not factors:
+        return name, run
+    with np.load(factors) as saved:
+        return name, with_weight_factors(run, saved["factor"])
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("files", nargs="+", help="name=work-dir")
+    parser.add_argument("files", nargs="+", help="name=work-dir[,factors.npz]")
     parser.add_argument("--out", type=Path, default=RESULTS / "benchmarks_2024.csv")
     args = parser.parse_args()
-    pairs = dict(item.split("=", 1) for item in args.files)
-    table = benchmark_table({name: load_run(Path(p)) for name, p in pairs.items()})
+    table = benchmark_table(dict(load_file(item) for item in args.files))
     table.to_csv(args.out, index=False)
     print(table.drop(columns=["url", "note", "source"]).to_string())

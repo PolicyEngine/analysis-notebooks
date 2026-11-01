@@ -15,7 +15,9 @@ from benchmarks import (
     JOINT_RETURNS_BY_AGI,
     MARRIED_OWN_CHILD_FAMILIES_BY_INCOME,
     benchmark_table,
+    load_file,
     measures,
+    with_weight_factors,
 )
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -140,6 +142,24 @@ def test_the_table_lines_up_published_figures_with_each_file():
     row = table.set_index("measure").loc["children_under_18"]
     assert row["published"] == 72_548_879
     assert row["one"] == row["two"] == 5
+
+
+def test_household_factors_reach_the_tax_units_inside_each_household():
+    run = small_run()
+    # Rows hold households 20 and 10, so the factor of 3 falls on the couple's home.
+    after = with_weight_factors(run, np.array([1.0, 3.0]))
+    assert after["household.household_weight"].tolist() == [3, 6]
+    assert after["tax_unit.tax_unit_weight"].tolist() == [6, 6, 3]
+
+
+def test_a_file_spec_can_carry_factors(tmp_path):
+    arrays = small_run()
+    np.savez(tmp_path / "filing_2024.npz", **arrays)
+    np.savez(tmp_path / "f.npz", factor=np.array([2.0, 2.0]))
+    name, run = load_file(f"doubled={tmp_path},{tmp_path / 'f.npz'}")
+    assert name == "doubled"
+    assert measures(run)["households"] == 2 * measures(arrays)["households"]
+    assert load_file(f"plain={tmp_path}")[1]["household.household_weight"].sum() == 5
 
 
 def test_a_filing_status_outside_the_known_names_raises():

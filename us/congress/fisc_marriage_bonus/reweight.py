@@ -27,6 +27,7 @@ import numpy as np
 
 # Census Bureau, Vintage 2025 national population estimates, July 1, 2024.
 # https://www2.census.gov/programs-surveys/popest/datasets/2020-2025/national/asrh/nc-est2025-agesex-res.csv
+CHILDREN_UNDER_1_2024 = 3_617_221
 CHILDREN_UNDER_6_2024 = 22_450_934
 CHILDREN_UNDER_18_2024 = 72_548_879
 # American Community Survey 2024 1-year estimates.
@@ -104,6 +105,7 @@ def household_moments(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     return {
         "people": per_household(np.ones_like(age)),
         "people_65_and_over": per_household(age >= 65),
+        "children_under_1": per_household(age < 1),
         "children_under_6": per_household(age < 6),
         "children_under_18": children,
         "households": np.ones(households),
@@ -131,18 +133,21 @@ def family_income_moments(moments: dict[str, np.ndarray]) -> dict[str, np.ndarra
 
 
 def published_targets(
-    moments: dict[str, np.ndarray], weights: np.ndarray, by_income: bool = False
+    moments: dict[str, np.ndarray], weights: np.ndarray, detailed: bool = False
 ) -> dict[str, float]:
     """The published counts, with the totals this experiment holds fixed."""
     held = ("people", "people_65_and_over", "adjusted_gross_income", "income_tax")
     share_married = CHILDREN_MARRIED_HOUSEHOLD_2024 / CHILDREN_ANY_HOUSEHOLD_2024
     # The income bands add to the family total, so the total leaves the solve.
-    married_families = (
+    extra = (
         {
-            f"married_own_child_income_{label}": families
-            for label, _, _, families in MARRIED_OWN_CHILD_FAMILIES_BY_INCOME
+            "children_under_1": CHILDREN_UNDER_1_2024,
+            **{
+                f"married_own_child_income_{label}": families
+                for label, _, _, families in MARRIED_OWN_CHILD_FAMILIES_BY_INCOME
+            },
         }
-        if by_income
+        if detailed
         else {
             "married_couple_households_with_own_child": (
                 MARRIED_COUPLE_FAMILIES_WITH_OWN_CHILD_2024
@@ -155,7 +160,7 @@ def published_targets(
         "children_under_18": CHILDREN_UNDER_18_2024,
         "households": HOUSEHOLDS_2024,
         "married_couple_households": MARRIED_COUPLE_HOUSEHOLDS_2024,
-        **married_families,
+        **extra,
         # The ACS and population estimates give different child totals, so the
         # target takes the ACS share of the population estimate's total.
         "children_in_married_couple_households": (
@@ -227,12 +232,12 @@ def apply_weight_factors(sim, year: int, path: Path) -> None:
         raise ValueError("the simulation kept its old household weights")
 
 
-def calibrate(run: dict[str, np.ndarray], by_income: bool = False) -> Calibration:
+def calibrate(run: dict[str, np.ndarray], detailed: bool = False) -> Calibration:
     moments = household_moments(run)
-    if by_income:
+    if detailed:
         moments |= family_income_moments(moments)
     weights = run["household.household_weight"].astype(float)
-    targets = published_targets(moments, weights, by_income)
+    targets = published_targets(moments, weights, detailed)
     names = list(targets)
     matrix = np.vstack([moments[name] for name in names])
     factors = entropy_balance(
@@ -251,14 +256,14 @@ if __name__ == "__main__":
     parser.add_argument("work", type=Path)
     parser.add_argument("factors", type=Path)
     parser.add_argument(
-        "--by-income",
+        "--detailed",
         action="store_true",
-        help="Also match married families with children across family income.",
+        help="Also match infants, and married families with children by income.",
     )
     args = parser.parse_args()
     with np.load(args.work / "filing_2024.npz") as saved:
         run = {name: saved[name] for name in saved.files}
-    result = calibrate(run, args.by_income)
+    result = calibrate(run, args.detailed)
     np.savez_compressed(
         args.factors,
         household_id=run["household.household_id"],

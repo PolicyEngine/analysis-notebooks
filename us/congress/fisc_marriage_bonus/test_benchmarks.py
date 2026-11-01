@@ -56,6 +56,15 @@ def test_counts_at_each_entity_weight():
     assert result["head_of_household_filers"] == 3
 
 
+def test_infants_count_at_the_unit_weight_and_split_by_marriage():
+    run = small_run()
+    # One infant in the couple's unit and one in the head of household's.
+    run["person.age"] = np.array([40, 39, 0, 25, 33, 0])
+    result = measures(run)
+    assert result["children_under_1"] == 5
+    assert result["share_of_infants_in_married_tax_units"] == 2 / 5
+
+
 def test_the_credit_stops_at_the_tax_liability():
     result = measures(small_run())
     assert result["joint_child_credit"] == 4_000
@@ -164,6 +173,7 @@ def test_children_split_exactly_across_status_at_any_weights(raw):
 def test_every_count_scales_with_the_weights_and_every_share_stays(scale):
     """Invariant: doubling weights doubles counts and leaves shares alone."""
     run = small_run()
+    run["person.age"] = np.array([40, 39, 0, 25, 33, 7])
     base = measures(run)
     run["tax_unit.tax_unit_weight"] = run["tax_unit.tax_unit_weight"] * scale
     run["household.household_weight"] = run["household.household_weight"] * scale

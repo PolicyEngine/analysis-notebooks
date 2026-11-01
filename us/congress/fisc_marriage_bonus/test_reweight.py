@@ -44,6 +44,7 @@ def test_moments_follow_each_household_whatever_the_row_order():
     # Rows run 30, 10, 20: the person alone, the married couple, the parent.
     assert moments["people"].tolist() == [1, 3, 2]
     assert moments["children_under_18"].tolist() == [0, 1, 1]
+    assert moments["children_under_1"].tolist() == [0, 0, 0]
     assert moments["children_under_6"].tolist() == [0, 1, 0]
     assert moments["people_65_and_over"].tolist() == [1, 0, 0]
     assert moments["married_couple_households"].tolist() == [0, 1, 0]
@@ -79,8 +80,9 @@ def test_the_income_solve_swaps_the_family_total_for_its_bands():
     moments = household_moments(small_run())
     moments |= family_income_moments(moments)
     weights = np.array([2.0, 3.0, 4.0])
-    targets = published_targets(moments, weights, by_income=True)
+    targets = published_targets(moments, weights, detailed=True)
     assert "married_couple_households_with_own_child" not in targets
+    assert targets["children_under_1"] == 3_617_221
     published = [item[3] for item in MARRIED_OWN_CHILD_FAMILIES_BY_INCOME]
     bands = [item[0] for item in MARRIED_OWN_CHILD_FAMILIES_BY_INCOME]
     assert [targets[f"married_own_child_income_{b}"] for b in bands] == published
@@ -128,8 +130,8 @@ def many_households(size: int = 3000) -> dict[str, np.ndarray]:
     }
 
 
-def test_a_solve_with_income_bands_hits_every_target_on_many_records():
-    result = calibrate(many_households(), by_income=True)
+def test_a_detailed_solve_hits_every_target_on_many_records():
+    result = calibrate(many_households(), detailed=True)
     for name, target in result.targets.items():
         assert result.after[name] == pytest.approx(target, rel=1e-6)
     assert (result.factors > 0).all()

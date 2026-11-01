@@ -59,6 +59,7 @@ SOURCES = {
     "soi_12": "IRS Publication 1304 Table 1.2, tax year 2023",
     "soi_13": "IRS Publication 1304 Table 1.3, tax year 2023",
     "advance": "IRS advance child tax credit Table 3, 2021",
+    "births": "CDC, Births: Final Data for 2024",
 }
 SOURCE_URLS = {
     "pep": "https://www2.census.gov/programs-surveys/popest/datasets/2020-2025/national/asrh/nc-est2025-agesex-res.csv",
@@ -66,6 +67,7 @@ SOURCE_URLS = {
     "soi_12": "https://www.irs.gov/pub/irs-soi/23in12ms.xls",
     "soi_13": "https://www.irs.gov/pub/irs-soi/23in13ms.xls",
     "advance": "https://www.irs.gov/pub/irs-soi/21in03actc.xls",
+    "births": "https://www.cdc.gov/nchs/fastats/unmarried-childbearing.htm",
 }
 
 
@@ -79,6 +81,14 @@ class Benchmark:
 
 BENCHMARKS = (
     Benchmark("children_under_18", 72_548_879, "pep"),
+    Benchmark("children_under_1", 3_617_221, "pep"),
+    Benchmark(
+        "share_of_infants_in_married_tax_units",
+        1 - 1_433_976 / 3_628_934,
+        "births",
+        "Married at birth; the ACS puts 69.9% of mothers with a recent birth as "
+        "now married (B13002_003E of B13002_002E), measured at the interview",
+    ),
     Benchmark("households", 132_737_146, "acs", "B11001_001E"),
     Benchmark("married_couple_households", 61_980_084, "acs", "B11001_003E"),
     Benchmark(
@@ -178,9 +188,13 @@ def measures(run: dict[str, np.ndarray]) -> dict[str, float]:
     in_households = household_moments(run)
     income = run["tax_unit.adjusted_gross_income"].astype(float)
     child = run["person.age"] < 18
+    infant = run["person.age"] < 1
 
     children_in_unit = np.bincount(
         person_unit, weights=child.astype(float), minlength=unit_ids.size
+    )
+    infants_in_unit = np.bincount(
+        person_unit, weights=infant.astype(float), minlength=unit_ids.size
     )
     # The IRS reports the credit after the tax limit, and the model's
     # non_refundable_ctc comes before it.
@@ -197,6 +211,10 @@ def measures(run: dict[str, np.ndarray]) -> dict[str, float]:
 
     return {
         "children_under_18": float(child_weight.sum()),
+        "children_under_1": float(unit_weight @ infants_in_unit),
+        "share_of_infants_in_married_tax_units": float(
+            unit_weight @ (infants_in_unit * married) / (unit_weight @ infants_in_unit)
+        ),
         **{
             name: float(household_weight @ in_households[name])
             for name in (

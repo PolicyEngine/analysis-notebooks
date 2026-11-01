@@ -1251,34 +1251,37 @@ def sampling_spread(folder: Path) -> pd.DataFrame:
     )
 
 
+def file_lines(folder: Path, person_file: Path) -> dict:
+    """The bonus and who holds it on one set of runs."""
+    fisc = load(folder, "fisc", PRIMARY_YEAR)
+    no_bonus = load(folder, "fisc_no_bonus", PRIMARY_YEAR)
+    weight = no_bonus["tax_unit.tax_unit_weight"]
+    joint = no_bonus["tax_unit.joint"].astype(bool)
+    base = no_bonus[BASE]
+    joint_base = float((base * weight)[joint].sum())
+    return {
+        "tax_units": float(weight.sum()),
+        "joint_tax_units": float(weight[joint].sum()),
+        "tax_units_with_a_child": float(weight[base > 0].sum()),
+        "joint_tax_units_with_a_child": float(weight[(base > 0) & joint].sum()),
+        "base_amount": float((base * weight).sum()),
+        "joint_base_amount": joint_base,
+        "joint_share_of_base_amount": joint_base / float((base * weight).sum()),
+        "statutory_bonus": STATUTORY_BONUS_RATE * joint_base,
+        "bonus": float(((fisc[CREDIT] - no_bonus[CREDIT]) * weight).sum()),
+        "credit": float((fisc[CREDIT] * weight).sum()),
+        **children_in_joint_units(fisc, read_arrays(person_file)),
+        **distribution_lines(folder),
+    }
+
+
 def data_comparison(ecps: Path, cps: Path, work: Path, detail: Path) -> pd.DataFrame:
     """The same model and reform on each data file, against the Census Bureau."""
-    columns = {}
-    for label, folder, person_file in (
-        ("march_2025_data", ecps, ecps / f"fisc_{PRIMARY_YEAR}_people.npz"),
-        ("cps_2024_data", cps, cps / f"fisc_{PRIMARY_YEAR}_people.npz"),
-        ("todays_data", work, detail / f"fisc_{PRIMARY_YEAR}_detail.npz"),
-    ):
-        fisc = load(folder, "fisc", PRIMARY_YEAR)
-        no_bonus = load(folder, "fisc_no_bonus", PRIMARY_YEAR)
-        weight = no_bonus["tax_unit.tax_unit_weight"]
-        joint = no_bonus["tax_unit.joint"].astype(bool)
-        base = no_bonus[BASE]
-        joint_base = float((base * weight)[joint].sum())
-        columns[label] = {
-            "tax_units": float(weight.sum()),
-            "joint_tax_units": float(weight[joint].sum()),
-            "tax_units_with_a_child": float(weight[base > 0].sum()),
-            "joint_tax_units_with_a_child": float(weight[(base > 0) & joint].sum()),
-            "base_amount": float((base * weight).sum()),
-            "joint_base_amount": joint_base,
-            "joint_share_of_base_amount": joint_base / float((base * weight).sum()),
-            "statutory_bonus": STATUTORY_BONUS_RATE * joint_base,
-            "bonus": float(((fisc[CREDIT] - no_bonus[CREDIT]) * weight).sum()),
-            "credit": float((fisc[CREDIT] * weight).sum()),
-            **children_in_joint_units(fisc, read_arrays(person_file)),
-            **distribution_lines(folder),
-        }
+    columns = {
+        "march_2025_data": file_lines(ecps, ecps / f"fisc_{PRIMARY_YEAR}_people.npz"),
+        "cps_2024_data": file_lines(cps, cps / f"fisc_{PRIMARY_YEAR}_people.npz"),
+        "todays_data": file_lines(work, detail / f"fisc_{PRIMARY_YEAR}_detail.npz"),
+    }
     columns["census_2023"] = {
         "joint_tax_units": 1e3 * CENSUS_2023["married_couple_family_groups"],
         "joint_tax_units_with_a_child": 1e3
@@ -1292,11 +1295,28 @@ def data_comparison(ecps: Path, cps: Path, work: Path, detail: Path) -> pd.DataF
     return pd.DataFrame(columns).rename_axis("line").reset_index()
 
 
-def check_the_answer_on_every_file(table: pd.DataFrame) -> dict:
+def reweighted_comparison(
+    work: Path, detail: Path, weights: dict[str, Path]
+) -> pd.DataFrame:
+    """The current file at its own weights and at each set from reweight.py."""
+    columns = {
+        "todays_data": file_lines(work, detail / f"fisc_{PRIMARY_YEAR}_detail.npz"),
+        **{
+            label: file_lines(folder, folder / f"fisc_{PRIMARY_YEAR}_people.npz")
+            for label, folder in weights.items()
+        },
+    }
+    return pd.DataFrame(columns).rename_axis("line").reset_index()
+
+
+def check_the_answer_on_every_file(
+    table: pd.DataFrame,
+    labels: tuple[str, ...] = ("march_2025_data", "cps_2024_data", "todays_data"),
+) -> dict:
     """The regressivity answer must hold on each data file, on both rankings."""
     lines = table.set_index("line")
     results = {}
-    for label in ("march_2025_data", "cps_2024_data", "todays_data"):
+    for label in labels:
         column = lines[label].dropna()
         if len(column) < len(lines[label]) or not np.isfinite(column).all():
             raise AssertionError(f"{label}: a line is not finite")
@@ -1327,6 +1347,7 @@ TEXT_COLUMNS = {
     "component_summary_2026": {"ranking", "component"},
     "cps_sampling_spread_2026": {"line"},
     "data_comparison_2026": {"line"},
+    "reweighted_comparison_2026": {"line"},
     "deciles_by_component_2026": {"ranking", "component"},
     "deciles_by_data_file_2026": {"data_file"},
     "gini_by_provision_2026": {"provision"},
@@ -1376,7 +1397,14 @@ def check_tables_are_finite(tables: dict[str, pd.DataFrame]) -> None:
 
 
 def main(
-    work: Path, rerun: Path, march: Path, ecps: Path, cps: Path, detail: Path
+    work: Path,
+    rerun: Path,
+    march: Path,
+    ecps: Path,
+    cps: Path,
+    detail: Path,
+    reweighted: Path,
+    reweighted_detailed: Path,
 ) -> None:
     marker = RESULTS / "invariants.json"
     marker.unlink(missing_ok=True)
@@ -1389,9 +1417,19 @@ def main(
         | check_the_decade(work)
         | check_comparison_file(ecps, "march_2025_data")
         | check_comparison_file(cps, "cps_2024_data")
+        | check_comparison_file(reweighted, "reweighted")
+        | check_comparison_file(reweighted_detailed, "reweighted_detailed")
     )
     comparison = data_comparison(ecps, cps, work, detail)
     invariants |= check_the_answer_on_every_file(comparison)
+    reweighted_folders = {
+        "reweighted": reweighted,
+        "reweighted_detailed": reweighted_detailed,
+    }
+    reweighted_table = reweighted_comparison(work, detail, reweighted_folders)
+    invariants |= check_the_answer_on_every_file(
+        reweighted_table, tuple(reweighted_folders)
+    )
     years, ladder, orders = reconciliation(march, ecps, work)
     agi_cap_row, poverty_invariants = agi_cap_provision(work, detail)
     invariants |= poverty_invariants
@@ -1410,6 +1448,7 @@ def main(
         "march_2025_ladder": ladder,
         "march_2025_step_orders": orders,
         "data_comparison_2026": comparison,
+        "reweighted_comparison_2026": reweighted_table,
         "deciles_by_data_file_2026": deciles_by_data_file(ecps, cps, work),
         "cps_sampling_spread_2026": sampling_spread(cps),
     }
@@ -1435,5 +1474,16 @@ if __name__ == "__main__":
     parser.add_argument("--ecps", type=Path, required=True)
     parser.add_argument("--cps", type=Path, required=True)
     parser.add_argument("--detail", type=Path, required=True)
+    parser.add_argument("--reweighted", type=Path, required=True)
+    parser.add_argument("--reweighted-detailed", type=Path, required=True)
     args = parser.parse_args()
-    main(args.work, args.rerun, args.march, args.ecps, args.cps, args.detail)
+    main(
+        args.work,
+        args.rerun,
+        args.march,
+        args.ecps,
+        args.cps,
+        args.detail,
+        args.reweighted,
+        args.reweighted_detailed,
+    )

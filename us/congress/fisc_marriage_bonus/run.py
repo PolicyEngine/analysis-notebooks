@@ -53,10 +53,12 @@ REFORM_ONLY_VARIABLES = (
 )
 CURRENT_LAW_ONLY_VARIABLES = ("refundable_ctc", "non_refundable_ctc")
 PEOPLE_VARIABLES = ("age", "person_weight")
-# The poverty flag with what the model builds it from, and the state income tax
-# that moves with the federal credit. summarize.py rebuilds both chains from these.
+# The poverty flag with what the model builds it from, the state income tax that
+# moves with the federal credit, and the head who carries a tax unit's taxes into
+# an SPM unit. summarize.py rebuilds these chains from them.
 DETAIL_VARIABLES = (
     *PEOPLE_VARIABLES,
+    "is_tax_unit_head",
     "person_in_poverty",
     "person_spm_unit_id",
     "spm_unit_id",

@@ -149,7 +149,7 @@ The share of children in joint tax units runs above the Census share on the curr
 
 Across the three files, the bonus narrows the Gini, its concentration falls below the Gini of income on both rankings, and the rest of the credit reaches the bottom more than it does. The share reaching the bottom half and the concentration on household income move a lot. Bonus dollars peak in decile 7 in the current dataset, decile 8 in the CPS resample and decile 9 in the March 2025 file, and dollars per person peak in the same deciles.
 
-The CPS file comes from `policyengine_us_data`'s `CPS_2024`, which builds on the Census Bureau's 2024 ASEC and then resamples it. It draws households with replacement in proportion to their Census weights, and it saves each household's weight as a count of its draws, so the file holds 20,657 distinct households from 27,881 draws. Redrawing that sample 200 times from the saved households gives a standard deviation of $0.46 billion in the bonus and 0.7 percentage points in the bottom five deciles' share, and `results/cps_sampling_spread_2026.csv` holds the spread. The bonus on each other file sits at least nine of those standard deviations away. These runs cover 2026 only.
+The CPS file comes from `policyengine_us_data`'s `CPS_2024`, which builds on the Census Bureau's 2024 ASEC and then resamples it. It draws households with replacement in proportion to their Census weights, and it saves each household's weight as a count of its draws, so the file holds 20,657 distinct households from 27,881 draws. Redrawing that sample 200 times from the saved households, with the rescaling in policyengine-core 3.26.1, gives a standard deviation of $0.41 billion in the bonus and 0.7 percentage points in the bottom five deciles' share, and `results/cps_sampling_spread_2026.csv` holds the spread. That spread covers the redraw and leaves out survey, imputation and calibration error in the file. The bonus on each other file sits at least ten of those standard deviations away. These runs cover 2026 only.
 
 Today's model refuses the March 2025 file as it stands, because the file saves an SPM threshold that the model computes for itself. `run.py` copies the file without that column, and income tax does not read it. The model then ignores 16 more columns. The March 2025 model read `medicare_part_b_premiums` as part of health insurance premiums and several reported benefit amounts, and neither model reads the three retirement distribution columns or `is_widowed`.
 
@@ -188,7 +188,7 @@ The local runs and the API use the same bundle. Local and API reform differences
 - Dataset `hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-spm-20260915`, sha256 `6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84`
 - `results/provenance.json` records the full bundle of the local runs, and each file in `results/api/` records the bundle of its API run
 - The March 2025 stack runs policyengine-us 1.211.0 and policyengine-core 3.16.3 on `enhanced_cps_2024.h5` at Hugging Face revision 0611cbeda3, and `march_2025.py` records how to build it
-- The CPS runs use `cps_2024.h5` from `policyengine/policyengine-us-data` at Hugging Face revision 21280dca59, sha256 `16b8cdbdc2c83d102fedb0f557d6de0a28344df4dacedb7ce95b587deef84fbc`
+- The CPS runs use `cps_2024.h5` from `policyengine/policyengine-us-data` at Hugging Face revision 21280dca59, sha256 `16b8cdbdc2c83d102fedb0f557d6de0a28344df4dacedb7ce95b587deef84fbc`. Its release manifest records release 1.115.5, built with policyengine-core 3.26.1 and policyengine-us 1.700.0
 
 ## Invariants
 
@@ -206,15 +206,18 @@ The local runs and the API use the same bundle. Local and API reform differences
 - The bonus measured by income tax and by net income each sit within 0.1 percent of the bonus measured by the credit.
 - The `fisc_no_agi_cap` credit equals the uncapped formula at every AGI, and that run pays credit at zero and negative AGI.
 - Local and API results agree on the bonus in 2026 and 2035, the decile means, the Gini, and the poverty rates, within the tolerances `summarize.py` states.
-- Every saved array and every table cell holds a finite number, apart from cells left blank on purpose, and saved equivalised income equals net income over the square root of household size.
+- Every saved array holds finite numbers, and saved equivalised income equals net income over the square root of household size.
+- Every table cell holds text or a finite number. Blanks fall only in the cells each table leaves empty, and `invariants.json` refuses a NaN before any table reaches disk.
+- The runs that saved the detail arrays match the runs in the work folder, array for array.
 - Each household's net income moves by its rebuilt credit less its rebuilt state income tax, to within a dollar. State income tax moves only for tax units whose credit moves, and its total matches the API's.
-- With the AGI cap and without it, each person's poverty flag matches their SPM unit's income and threshold, the thresholds match, and each household's SPM income moves with its net income. Nobody enters poverty when the cap goes, someone leaves it, and the rates fall at or below the API's partial removal.
-- Between 2026 and 2035 every record keeps its ages, joint status, base amount and household size, and every weight grows by one factor.
+- With the AGI cap and without it, each person's poverty flag matches their SPM unit's income and threshold, the thresholds match, and each SPM unit's income moves by its members' federal and state income tax changes, with each tax unit counted in its head's SPM unit as the model counts it. Nobody enters poverty when the cap goes, someone leaves it, and the rates fall at or below the API's partial removal.
+- Between 2026 and 2035 every record keeps its identifiers, person links, ages, joint status, base amount and household size, and every weight grows by one factor.
+- On the March 2025 and CPS files, every tax unit's credit equals the closed form, no unmarried tax unit receives the bonus, and each household's credit equals the sum of its tax units' credits. Income tax and net income move with the credit as they do on the current dataset, apart from the state income tax check, and the household credit and net income each put the bonus within 0.1 percent of the credit. The net income check widens past a dollar where single precision cannot resolve one: 14 households in the March 2025 file, with $70 million to $148 million of net income and a combined weight of 0.05, sit up to $24 from it.
 - On each of the three data files, the bonus lowers the Gini, concentrates below income and reaches the bottom less than the rest of the credit, on both rankings.
 - No unmarried tax unit receives the bonus in 2035.
 - The March 2025 rerun reproduces the published CSV in 2026 and 2035.
 
-`test_analysis.py` states the formula and table properties for all inputs with Hypothesis. `test_summarize.py` confirms that the checks fail on runs that break them, including offsetting tax errors, net income with no tax or benefit behind it, a household bonus that misses its tax units, state tax with no credit behind it, poverty flags that their incomes do not explain, a saved NaN, and a file that breaks the regressivity answer. It also confirms that the decile rows sum to the aggregate.
+`test_analysis.py` states the formula and table properties for all inputs with Hypothesis. `test_summarize.py` confirms that the checks fail on runs that break them, including offsetting tax errors, net income with no tax or benefit behind it, a household bonus that misses its tax units, state tax with no credit behind it, poverty flags that their incomes do not explain, income moved between SPM units, a comparison file whose household bonus misses its tax units, a saved NaN, a stray blank or infinity in a table, and a file that breaks the regressivity answer. It also confirms that the decile rows sum to the aggregate.
 
 ## Caveats
 

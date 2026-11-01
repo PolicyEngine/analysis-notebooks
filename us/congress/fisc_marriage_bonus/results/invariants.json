@@ -30,8 +30,14 @@
  "bonus_state_income_tax_local": 2987030.1917282483,
  "bonus_state_income_tax_api": 2987030.1916503906,
  "weight_growth_from_2026_to_2035": 1.033519347005821,
+ "march_2025_data_largest_tax_unit_gap_from_the_credit": 0.00341796875,
+ "march_2025_data_largest_household_gap_from_tax_and_benefits": 24.0,
+ "march_2025_data_bonus_measured_by_the_credit": 25348257710.219925,
+ "cps_2024_data_largest_tax_unit_gap_from_the_credit": 0.00341796875,
+ "cps_2024_data_largest_household_gap_from_tax_and_benefits": 0.015625,
+ "cps_2024_data_bonus_measured_by_the_credit": 29606567522.395966,
  "march_2025_data_gini_change_with_the_bonus": -0.0003706618751800894,
  "cps_2024_data_gini_change_with_the_bonus": -0.00029599705045363356,
  "todays_data_gini_change_with_the_bonus": -0.0007068382346433477,
- "agi_cap_largest_household_gap_from_spm_income": 0.125
+ "agi_cap_largest_spm_unit_gap_from_taxes": 0.04638671875
 }

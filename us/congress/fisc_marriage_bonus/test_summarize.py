@@ -21,8 +21,11 @@ from summarize import (
     PRIMARY_YEAR,
     bonus_gap_from_api,
     bonus_reach,
+    check_comparison_file,
+    check_detail_runs,
     check_invariants,
     check_poverty_run,
+    check_state_tax_against_api,
     check_tables_are_finite,
     check_the_answer_on_every_file,
     check_the_decade,
@@ -31,9 +34,12 @@ from summarize import (
     distribution,
     equivalised_gini,
     gini_by_provision,
+    income_tolerance,
     load,
     main,
+    rescaled_draws,
     sampling_spread,
+    spm_unit_totals,
     versus_reeves,
 )
 
@@ -95,6 +101,7 @@ def fake_detail(run, state_tax=None):
     income = run[NET_INCOME].copy()
     threshold = np.full(N, FAKE_POVERTY_THRESHOLD)
     return fake_people() | {
+        "is_tax_unit_head": np.ones(N, dtype=bool),
         "person_in_poverty": income < threshold,
         "person_spm_unit_id": np.arange(N),
         "spm_unit_id": np.arange(N),
@@ -295,6 +302,7 @@ class TestPovertyRun:
     def runs():
         with_cap, without_cap = fake_run(0.2), fake_run(0.2)
         without_cap[NET_INCOME][0] += 13_000
+        without_cap[INCOME_TAX][0] -= 13_000
         return (
             with_cap,
             without_cap,
@@ -304,7 +312,7 @@ class TestPovertyRun:
 
     def test_a_lift_the_income_explains_passes(self):
         results = check_poverty_run(*self.runs())
-        assert results["agi_cap_largest_household_gap_from_spm_income"] == 0
+        assert results["agi_cap_largest_spm_unit_gap_from_taxes"] == 0
 
     def test_a_flag_the_income_does_not_explain_fails(self):
         with_cap, without_cap, detail, detail_without = self.runs()
@@ -312,7 +320,7 @@ class TestPovertyRun:
         with pytest.raises(AssertionError, match="misses its income"):
             check_poverty_run(with_cap, without_cap, detail, detail_without)
 
-    def test_income_with_no_household_gain_behind_it_fails(self):
+    def test_income_with_no_tax_cut_behind_it_fails(self):
         with_cap, without_cap, detail, detail_without = self.runs()
         poor = np.flatnonzero(detail_without["person_in_poverty"])[0]
         detail_without["spm_unit_net_income"][poor] += 50_000
@@ -334,17 +342,36 @@ class TestPovertyRun:
     def test_someone_moved_into_poverty_fails(self):
         with_cap, without_cap, detail, _ = self.runs()
         above = np.flatnonzero(~detail["person_in_poverty"])[0]
+        without_cap[INCOME_TAX][above] += (
+            without_cap[NET_INCOME][above] - FAKE_POVERTY_THRESHOLD + 1
+        )
         without_cap[NET_INCOME][above] = FAKE_POVERTY_THRESHOLD - 1
         with pytest.raises(AssertionError, match="into poverty"):
             check_poverty_run(with_cap, without_cap, detail, fake_detail(without_cap))
 
-    def test_an_spm_unit_across_two_households_fails(self):
+    def test_income_moved_between_spm_units_in_one_household_fails(self):
         with_cap, without_cap, detail, detail_without = self.runs()
-        for arrays in (detail, detail_without):
-            arrays["person_spm_unit_id"][1] = 0
-            arrays["person_in_poverty"][1] = arrays["person_in_poverty"][0]
-        with pytest.raises(AssertionError, match="spans two households"):
+        for run in (with_cap, without_cap):
+            run["person.person_household_id"][2] = 1
+        detail_without["spm_unit_net_income"][1] += 500
+        detail_without["spm_unit_net_income"][2] -= 500
+        with pytest.raises(AssertionError, match="SPM income moved apart"):
             check_poverty_run(with_cap, without_cap, detail, detail_without)
+
+    def test_a_tax_unit_counts_in_its_heads_spm_unit(self):
+        run = {
+            "tax_unit.tax_unit_id": np.array([7, 8]),
+            "person.person_tax_unit_id": np.array([7, 7, 8]),
+        }
+        detail = {
+            "is_tax_unit_head": np.array([False, True, True]),
+            "person_spm_unit_id": np.array([1, 2, 2]),
+            "spm_unit_id": np.array([1, 2]),
+        }
+        assert spm_unit_totals(run, detail, np.array([100.0, 5.0])).tolist() == [
+            0.0,
+            105.0,
+        ]
 
     def test_different_people_fail(self):
         with_cap, without_cap, detail, detail_without = self.runs()
@@ -372,6 +399,47 @@ class TestTablesAreFinite:
         ladder = pd.DataFrame({"rung": ["start"], "step": [np.nan]})
         check_tables_are_finite({"march_2025_ladder": ladder})
 
+    def test_a_blank_outside_its_cell_fails(self):
+        ladder = pd.DataFrame({"rung": list("abc"), "step": [np.nan, np.nan, np.nan]})
+        with pytest.raises(AssertionError, match="a cell in step"):
+            check_tables_are_finite({"march_2025_ladder": ladder})
+
+    def test_a_number_in_a_blank_cell_fails(self):
+        ladder = pd.DataFrame({"rung": ["start"], "step": [1.0]})
+        with pytest.raises(AssertionError, match="a cell in step"):
+            check_tables_are_finite({"march_2025_ladder": ladder})
+
+    def test_infinity_in_a_column_with_blanks_fails(self):
+        ladder = pd.DataFrame({"rung": list("abc"), "step": [np.nan, np.nan, np.inf]})
+        with pytest.raises(AssertionError, match="a cell in step"):
+            check_tables_are_finite({"march_2025_ladder": ladder})
+
+    def test_a_column_of_nones_fails(self):
+        table = pd.DataFrame({"a": [None, None]}, dtype=object)
+        with pytest.raises(AssertionError, match="neither text nor number"):
+            check_tables_are_finite({"table": table})
+
+    def test_a_decile_row_blanks_only_what_it_cannot_divide(self):
+        table = pd.DataFrame(
+            {
+                "income_dollars": [-5.0, 5.0],
+                "households_receiving": [1.0, 0.0],
+                "percent_of_income": [np.nan, 1.0],
+                "mean_per_receiving_household": [1.0, np.nan],
+            }
+        )
+        check_tables_are_finite({"deciles_by_data_file_2026": table})
+        table.loc[1, "percent_of_income"] = np.nan
+        with pytest.raises(AssertionError, match="percent_of_income"):
+            check_tables_are_finite({"deciles_by_data_file_2026": table})
+
+    def test_a_census_cell_outside_the_census_lines_fails(self):
+        table = pd.DataFrame(
+            {"line": ["children_under_18", "bonus"], "census_2023": [1.0, 2.0]}
+        )
+        with pytest.raises(AssertionError, match="census_2023"):
+            check_tables_are_finite({"data_comparison_2026": table})
+
 
 class TestTheDecade:
     def later(self, work, run):
@@ -390,6 +458,14 @@ class TestTheDecade:
             "weight_growth_from_2026_to_2035"
         ] == pytest.approx(1.03)
 
+    def test_reordered_tax_units_fail(self, runs):
+        work, _ = runs
+        run = self.grown()
+        run["tax_unit.tax_unit_id"] = run["tax_unit.tax_unit_id"][::-1]
+        self.later(work, run)
+        with pytest.raises(AssertionError, match="changed tax_unit.tax_unit_id"):
+            check_the_decade(work)
+
     def test_a_family_that_changes_fails(self, runs):
         work, _ = runs
         run = self.grown()
@@ -405,6 +481,113 @@ class TestTheDecade:
         self.later(work, run)
         with pytest.raises(AssertionError, match="unevenly"):
             check_the_decade(work)
+
+
+class TestComparisonFile:
+    def test_consistent_runs_pass(self, runs):
+        work, _ = runs
+        result = check_comparison_file(work, "file")
+        assert result["file_bonus_measured_by_the_credit"] > 0
+
+    def test_a_household_bonus_missing_its_tax_units_fails(self, runs):
+        work, _ = runs
+        fisc = fake_run(0.2)
+        fisc[HOUSEHOLD_CREDIT] = fisc[HOUSEHOLD_CREDIT] * 1.5
+        save(work, "fisc", fisc)
+        with pytest.raises(AssertionError, match="misses its tax units"):
+            check_comparison_file(work, "file")
+
+    def test_a_credit_off_the_closed_form_fails(self, runs):
+        work, _ = runs
+        fisc = fake_run(0.2)
+        married = np.flatnonzero(fisc["tax_unit.joint"] & (fisc[BASE] > 0))[0]
+        fisc[CREDIT][married] += 100
+        save(work, "fisc", fisc)
+        with pytest.raises(AssertionError, match="closed form"):
+            check_comparison_file(work, "file")
+
+    def test_a_baseline_with_other_weights_fails(self, runs):
+        work, _ = runs
+        current = fake_run(0.0, ctc=500.0)
+        current["household.household_weight"] = np.full(N, 2_000.0)
+        save(work, "baseline", current)
+        with pytest.raises(AssertionError, match="differs between runs"):
+            check_comparison_file(work, "file")
+
+    def test_net_income_with_no_credit_behind_it_fails(self, runs):
+        work, _ = runs
+        fisc = fake_run(0.2)
+        fisc[NET_INCOME] = fisc[NET_INCOME] + 1_000
+        fisc["household.household_benefits"] = (
+            fisc["household.household_benefits"] + 1_000
+        )
+        save(work, "fisc", fisc)
+        with pytest.raises(AssertionError, match="disagree"):
+            check_comparison_file(work, "file")
+
+
+class TestIncomeTolerance:
+    @staticmethod
+    def save_a_rich_household(work, gap):
+        """Household 0 holds $148 million and almost no weight, as in the March file."""
+        for scenario, rate, ctc, income in (
+            ("baseline", 0.0, 500.0, 148_000_000.0),
+            ("fisc", 0.2, 0.0, 148_000_000.0),
+            ("fisc_no_bonus", 0.0, 0.0, 148_000_000.0 + gap),
+        ):
+            run = fake_run(rate, ctc=ctc)
+            run[NET_INCOME][0] = income
+            run["household.household_weight"][0] = 0.001
+            save(work, scenario, run)
+
+    def test_a_rounding_step_at_a_very_large_income_passes(self, runs):
+        work, _ = runs
+        self.save_a_rich_household(work, 24.0)
+        check_comparison_file(work, "file")
+
+    def test_a_larger_gap_at_that_income_fails(self, runs):
+        work, _ = runs
+        self.save_a_rich_household(work, 40.0)
+        with pytest.raises(AssertionError, match="tax and benefits"):
+            check_comparison_file(work, "file")
+
+    def test_a_dollar_holds_at_ordinary_incomes(self):
+        run = fake_run(0.2)
+        assert income_tolerance(run).max() < 1.1
+
+
+class TestDetailRuns:
+    def test_a_detail_run_that_differs_fails(self, runs, tmp_path):
+        work, _ = runs
+        detail = tmp_path / "detail"
+        detail.mkdir()
+        for scenario in ("fisc", "fisc_no_bonus", "fisc_no_agi_cap"):
+            save(detail, scenario, load(work, scenario, PRIMARY_YEAR))
+        check_detail_runs(work, detail)
+        broken = load(work, "fisc", PRIMARY_YEAR)
+        broken["tax_unit.tax_unit_weight"][0] += 1
+        save(detail, "fisc", broken)
+        with pytest.raises(AssertionError, match="detail run of fisc"):
+            check_detail_runs(work, detail)
+
+
+class TestStateTaxAgainstApi:
+    def test_a_nan_weight_fails(self, runs):
+        work, _ = runs
+        fisc = fake_run(0.2)
+        fisc["tax_unit.tax_unit_weight"][0] = np.nan
+        save(work, "fisc", fisc)
+        with pytest.raises(AssertionError, match="not finite"):
+            check_state_tax_against_api(work, work)
+
+
+class TestRescaledDraws:
+    def test_person_rows_reach_the_original_total(self):
+        counts = np.array([2.0, 0.0, 1.0])
+        people = np.array([1.0, 4.0, 3.0])
+        weights = rescaled_draws(counts, people, 100.0)
+        assert (weights * people).sum() == pytest.approx(100.0)
+        assert weights.tolist() == pytest.approx([40.0, 0.0, 20.0])
 
 
 class TestSamplingSpread:
@@ -448,6 +631,47 @@ class TestMain:
         broken[CREDIT][1] += 1
         save(work, "fisc_restored_bonus", broken)
         with pytest.raises(AssertionError, match="restoring"):
+            main(work, rerun, work, work, work, work)
+        assert list(results.iterdir()) == []
+
+    def test_a_nan_invariant_writes_nothing(self, runs, tmp_path, monkeypatch):
+        work, rerun = runs
+        results = tmp_path / "results"
+        results.mkdir()
+        monkeypatch.setattr(summarize, "RESULTS", results)
+        for name in (
+            "check_detail_runs",
+            "check_invariants",
+            "check_agi_cap_run",
+            "check_against_api",
+            "check_state_tax_against_api",
+            "check_comparison_file",
+            "check_the_answer_on_every_file",
+            "check_tables_are_finite",
+        ):
+            monkeypatch.setattr(summarize, name, lambda *args: {})
+        monkeypatch.setattr(
+            summarize, "check_the_decade", lambda folder: {"bad": float("nan")}
+        )
+        empty = pd.DataFrame()
+        for name in (
+            "budget_by_year",
+            "poverty_effects",
+            "provision_comparison",
+            "gini_by_provision",
+            "bonus_reach",
+            "versus_reeves",
+            "data_comparison",
+            "deciles_by_data_file",
+            "sampling_spread",
+        ):
+            monkeypatch.setattr(summarize, name, lambda *args: empty)
+        monkeypatch.setattr(summarize, "distribution", lambda folder: {})
+        monkeypatch.setattr(
+            summarize, "reconciliation", lambda *args: (empty, empty, empty)
+        )
+        monkeypatch.setattr(summarize, "agi_cap_provision", lambda *args: ({}, {}))
+        with pytest.raises(ValueError, match="not JSON compliant"):
             main(work, rerun, work, work, work, work)
         assert list(results.iterdir()) == []
 

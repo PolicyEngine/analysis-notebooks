@@ -11,9 +11,12 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from reweight import (
+    CHILD_CREDIT_2023,
     MARRIED_OWN_CHILD_FAMILIES_BY_INCOME,
     apply_weight_factors,
     calibrate,
+    child_credit_after_tax_limit,
+    child_credit_moments,
     entropy_balance,
     family_income_moments,
     household_moments,
@@ -86,6 +89,49 @@ def test_the_income_solve_swaps_the_family_total_for_its_bands():
     published = [item[3] for item in MARRIED_OWN_CHILD_FAMILIES_BY_INCOME]
     bands = [item[0] for item in MARRIED_OWN_CHILD_FAMILIES_BY_INCOME]
     assert [targets[f"married_own_child_income_{b}"] for b in bands] == published
+
+
+def with_credits(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """Units 7, 8 and 9 carry no credit, a credit under the limit and one above it."""
+    return run | {
+        "tax_unit.non_refundable_ctc": np.array([0.0, 2000.0, 2000.0]),
+        "tax_unit.ctc_limiting_tax_liability": np.array([500.0, 5000.0, -50.0]),
+    }
+
+
+def test_the_credit_stops_at_the_tax_limit_and_never_goes_negative():
+    assert child_credit_after_tax_limit(with_credits(small_run())).tolist() == [
+        0,
+        2000,
+        0,
+    ]
+
+
+def test_child_credit_lines_follow_each_household_whatever_the_row_order():
+    run = with_credits(small_run())
+    run["tax_unit.ctc_limiting_tax_liability"] = np.array([500.0, 5000.0, 700.0])
+    moments = child_credit_moments(run)
+    # Rows run 30, 10, 20: the person alone, the married couple, the parent.
+    assert moments["joint_returns_with_child_credit"].tolist() == [0, 1, 0]
+    assert moments["joint_child_credit"].tolist() == [0, 2000, 0]
+    assert moments["other_returns_with_child_credit"].tolist() == [0, 0, 1]
+    assert moments["other_child_credit"].tolist() == [0, 0, 700]
+
+
+def test_a_surviving_spouse_sits_on_the_joint_side_as_in_the_irs_tables():
+    run = with_credits(small_run())
+    run["tax_unit.filing_status"] = np.array(
+        ["SINGLE", "SURVIVING_SPOUSE", "HEAD_OF_HOUSEHOLD"]
+    )
+    assert child_credit_moments(run)["joint_child_credit"].tolist() == [0, 2000, 0]
+
+
+def test_the_child_credit_solve_adds_the_irs_lines_to_the_targets():
+    moments = household_moments(small_run())
+    weights = np.array([2.0, 3.0, 4.0])
+    targets = published_targets(moments, weights, child_credit=True)
+    assert CHILD_CREDIT_2023.items() <= targets.items()
+    assert "joint_child_credit" not in published_targets(moments, weights)
 
 
 def many_households(size: int = 3000) -> dict[str, np.ndarray]:

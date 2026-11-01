@@ -24,7 +24,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from reweight import (
+    CHILD_CREDIT_2023,
+    JOINT_COLUMN,
     MARRIED_OWN_CHILD_FAMILIES_BY_INCOME,
+    child_credit_after_tax_limit,
     family_income_moments,
     household_moments,
     household_position,
@@ -120,27 +123,27 @@ BENCHMARKS = (
     Benchmark("head_of_household_filers", 21_604_491, "soi_13"),
     Benchmark(
         "joint_returns_with_child_credit",
-        21_526_250 + 739_342,
+        CHILD_CREDIT_2023["joint_returns_with_child_credit"],
         "soi_13",
         "Nonrefundable child and other dependent credit, joint, surviving "
         "spouse and separate",
     ),
     Benchmark(
         "joint_child_credit",
-        58_813_439_000 + 1_527_331_000,
+        CHILD_CREDIT_2023["joint_child_credit"],
         "soi_13",
         "Nonrefundable child and other dependent credit, joint, surviving "
         "spouse and separate",
     ),
     Benchmark(
         "other_returns_with_child_credit",
-        14_827_347 + 1_856_588,
+        CHILD_CREDIT_2023["other_returns_with_child_credit"],
         "soi_13",
         "Head of household plus single",
     ),
     Benchmark(
         "other_child_credit",
-        22_060_826_000 + 2_016_769_000,
+        CHILD_CREDIT_2023["other_child_credit"],
         "soi_13",
         "Head of household plus single",
     ),
@@ -180,8 +183,7 @@ def measures(run: dict[str, np.ndarray]) -> dict[str, float]:
     if not np.isin(status, FILING_STATUSES).all():
         raise ValueError(f"unknown filing status in {sorted(set(status))}")
     married = status == JOINT
-    # IRS tables put surviving spouses in the joint column.
-    joint_column = np.isin(status, (JOINT, SURVIVING_SPOUSE))
+    joint_column = np.isin(status, JOINT_COLUMN)
     filer = run["tax_unit.tax_unit_is_filer"].astype(bool)
     unit_weight = run["tax_unit.tax_unit_weight"].astype(float)
     household_weight = run["household.household_weight"].astype(float)
@@ -196,12 +198,7 @@ def measures(run: dict[str, np.ndarray]) -> dict[str, float]:
     infants_in_unit = np.bincount(
         person_unit, weights=infant.astype(float), minlength=unit_ids.size
     )
-    # The IRS reports the credit after the tax limit, and the model's
-    # non_refundable_ctc comes before it.
-    credit = np.minimum(
-        run["tax_unit.non_refundable_ctc"].astype(float),
-        np.maximum(run["tax_unit.ctc_limiting_tax_liability"].astype(float), 0.0),
-    )
+    credit = child_credit_after_tax_limit(run)
     claimed = credit > 0
     limit = np.where(joint_column, ADVANCE_LIMIT_JOINT, ADVANCE_LIMIT_OTHER)
     advance = (children_in_unit > 0) & (

@@ -65,7 +65,11 @@ SINGLE_PRECISION_STEPS = 2
 SAMPLING_DRAWS = 200
 SAMPLING_SEED = 0
 LADDER_RUNGS_WITH_NO_STEP = 2
-DECILE_TABLES = ("deciles_by_component_2026", "deciles_by_data_file_2026")
+DECILE_TABLES = (
+    "deciles_by_component_2026",
+    "deciles_by_data_file_2026",
+    "deciles_by_weights_2026",
+)
 CAREGIVER_AGE = 18
 PRIMARY_YEAR = 2026
 LAST_YEAR = 2035
@@ -1142,6 +1146,17 @@ def deciles_by_data_file(ecps: Path, cps: Path, work: Path) -> pd.DataFrame:
     )
 
 
+def deciles_by_weights(weights: dict[str, Path]) -> pd.DataFrame:
+    """The bonus by decile on each set of weights, ranked at those weights."""
+    return pd.concat(
+        [
+            bonus_by_decile(folder).assign(weights=label)
+            for label, folder in weights.items()
+        ],
+        ignore_index=True,
+    )
+
+
 def distribution_lines(folder: Path) -> dict:
     """Shares, concentration and Gini on one data file, ranked within that file."""
     current = load(folder, "baseline", PRIMARY_YEAR)
@@ -1349,6 +1364,17 @@ def reweighted_decade(folder: Path, full_year: Path) -> pd.DataFrame:
     return table
 
 
+def reweighted_decades(
+    decades: dict[str, Path], weights: dict[str, Path]
+) -> pd.DataFrame:
+    """Each year's bonus on every set of weights that ran the whole window."""
+    tables = [
+        reweighted_decade(folder, weights[label]).assign(weights=label)
+        for label, folder in decades.items()
+    ]
+    return pd.concat(tables).rename_axis("year").reset_index().astype({"year": str})
+
+
 def check_the_answer_on_every_file(
     table: pd.DataFrame,
     labels: tuple[str, ...] = ("march_2025_data", "cps_2024_data", "todays_data"),
@@ -1390,11 +1416,13 @@ TEXT_COLUMNS = {
     "reweighted_comparison_2026": {"line"},
     "deciles_by_component_2026": {"ranking", "component"},
     "deciles_by_data_file_2026": {"data_file"},
+    "deciles_by_weights_2026": {"weights"},
     "gini_by_provision_2026": {"provision"},
     "march_2025_ladder": {"rung"},
     "march_2025_step_orders": {"step"},
     "poverty_2026": {"comparison", "group"},
     "provisions_2026": {"provision", "path"},
+    "reweighted_budget_by_year": {"year", "weights"},
     "versus_reeves_estimate": {"line"},
 }
 
@@ -1443,9 +1471,8 @@ def main(
     ecps: Path,
     cps: Path,
     detail: Path,
-    reweighted: Path,
-    reweighted_detailed: Path,
-    decade: Path,
+    weights: dict[str, Path],
+    decades: dict[str, Path],
 ) -> None:
     marker = RESULTS / "invariants.json"
     marker.unlink(missing_ok=True)
@@ -1458,19 +1485,13 @@ def main(
         | check_the_decade(work)
         | check_comparison_file(ecps, "march_2025_data")
         | check_comparison_file(cps, "cps_2024_data")
-        | check_comparison_file(reweighted, "reweighted")
-        | check_comparison_file(reweighted_detailed, "reweighted_detailed")
     )
+    for label, folder in weights.items():
+        invariants |= check_comparison_file(folder, label)
     comparison = data_comparison(ecps, cps, work, detail)
     invariants |= check_the_answer_on_every_file(comparison)
-    reweighted_folders = {
-        "reweighted": reweighted,
-        "reweighted_detailed": reweighted_detailed,
-    }
-    reweighted_table = reweighted_comparison(work, detail, reweighted_folders)
-    invariants |= check_the_answer_on_every_file(
-        reweighted_table, tuple(reweighted_folders)
-    )
+    reweighted_table = reweighted_comparison(work, detail, weights)
+    invariants |= check_the_answer_on_every_file(reweighted_table, tuple(weights))
     years, ladder, orders = reconciliation(march, ecps, work)
     agi_cap_row, poverty_invariants = agi_cap_provision(work, detail)
     invariants |= poverty_invariants
@@ -1478,11 +1499,7 @@ def main(
         [provision_comparison(), pd.DataFrame([agi_cap_row])],
         ignore_index=True,
     )
-    indexed = {
-        "budget_by_year": budget_by_year(),
-        "march_2025_comparison": years,
-        "reweighted_budget_by_year": reweighted_decade(decade, reweighted),
-    }
+    indexed = {"budget_by_year": budget_by_year(), "march_2025_comparison": years}
     plain = {
         "poverty_2026": poverty_effects(),
         "provisions_2026": provisions,
@@ -1494,6 +1511,8 @@ def main(
         "march_2025_step_orders": orders,
         "data_comparison_2026": comparison,
         "reweighted_comparison_2026": reweighted_table,
+        "reweighted_budget_by_year": reweighted_decades(decades, weights),
+        "deciles_by_weights_2026": deciles_by_weights(weights),
         "deciles_by_data_file_2026": deciles_by_data_file(ecps, cps, work),
         "cps_sampling_spread_2026": sampling_spread(cps),
     }
@@ -1511,6 +1530,11 @@ def main(
     marker.write_text(marker_text)
 
 
+def labelled_folders(items: list[str]) -> dict[str, Path]:
+    """Read label=folder pairs from the command line."""
+    return {label: Path(folder) for label, folder in (i.split("=", 1) for i in items)}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work", type=Path, required=True)
@@ -1519,9 +1543,8 @@ if __name__ == "__main__":
     parser.add_argument("--ecps", type=Path, required=True)
     parser.add_argument("--cps", type=Path, required=True)
     parser.add_argument("--detail", type=Path, required=True)
-    parser.add_argument("--reweighted", type=Path, required=True)
-    parser.add_argument("--reweighted-detailed", type=Path, required=True)
-    parser.add_argument("--decade", type=Path, required=True)
+    parser.add_argument("--weights", nargs="+", required=True, metavar="LABEL=DIR")
+    parser.add_argument("--decades", nargs="+", required=True, metavar="LABEL=DIR")
     args = parser.parse_args()
     main(
         args.work,
@@ -1530,7 +1553,6 @@ if __name__ == "__main__":
         args.ecps,
         args.cps,
         args.detail,
-        args.reweighted,
-        args.reweighted_detailed,
-        args.decade,
+        labelled_folders(args.weights),
+        labelled_folders(args.decades),
     )

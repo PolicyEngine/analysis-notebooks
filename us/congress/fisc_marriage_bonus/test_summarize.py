@@ -712,7 +712,7 @@ class TestMain:
         broken[CREDIT][1] += 1
         save(work, "fisc_restored_bonus", broken)
         with pytest.raises(AssertionError, match="restoring"):
-            main(work, rerun, work, work, work, work, work, work, work)
+            main(work, rerun, work, work, work, work, {"set": work}, {"set": work})
         assert list(results.iterdir()) == []
 
     def test_a_nan_invariant_writes_nothing(self, runs, tmp_path, monkeypatch):
@@ -744,8 +744,9 @@ class TestMain:
             "versus_reeves",
             "data_comparison",
             "reweighted_comparison",
-            "reweighted_decade",
+            "reweighted_decades",
             "deciles_by_data_file",
+            "deciles_by_weights",
             "sampling_spread",
         ):
             monkeypatch.setattr(summarize, name, lambda *args: empty)
@@ -755,7 +756,7 @@ class TestMain:
         )
         monkeypatch.setattr(summarize, "agi_cap_provision", lambda *args: ({}, {}))
         with pytest.raises(ValueError, match="not JSON compliant"):
-            main(work, rerun, work, work, work, work, work, work, work)
+            main(work, rerun, work, work, work, work, {"set": work}, {"set": work})
         assert list(results.iterdir()) == []
 
 
@@ -808,6 +809,22 @@ class TestReweightedDecade:
         save_year(2030, bonus, tax_change=-0.9 * bonus)
         with pytest.raises(AssertionError, match="income tax disagree"):
             reweighted_decade(folder, work)
+
+    def test_each_set_keeps_its_own_rows_and_text_years(self, decade):
+        work, folder, bonus, _ = decade
+        table = summarize.reweighted_decades(
+            {"one": folder, "two": folder}, {"one": work, "two": work}
+        )
+        assert set(table.weights) == {"one", "two"}
+        assert (table.year == "2026-2035").sum() == 2
+        assert table.year.map(type).eq(str).all()
+        summed = table[(table.weights == "two") & (table.year == "2026-2035")]
+        assert summed.bonus.item() == pytest.approx(10 * bonus)
+
+    def test_a_label_with_no_weights_raises(self, decade):
+        work, folder, *_ = decade
+        with pytest.raises(KeyError):
+            summarize.reweighted_decades({"one": folder}, {"two": work})
 
     def test_a_missing_year_raises(self, decade):
         work, folder, *_ = decade

@@ -2,7 +2,7 @@
 
     uv run python us/congress/fisc_marriage_bonus/summarize.py \
         --work <work-dir> --rerun <rerun-dir> --march <march-dir> \
-        --ecps <ecps-dir> --cps <cps-dir> --poverty <poverty-dir>
+        --ecps <ecps-dir> --cps <cps-dir> --detail <detail-dir>
 
 The script removes results/invariants.json first and writes every table only
 after every check passes, so that file exists only for a run that passed.
@@ -44,9 +44,6 @@ FISC_CTC_REPEAL_ONLY = 99025
 CURRENT_LAW = 2
 REEVES_ESTIMATE = 30e9
 DOLLAR_TOLERANCE = 1.0
-# State income tax moves with the federal credit, by up to 8.75 percent of the
-# change in a household's credit on these runs.
-STATE_TAX_SHARE_OF_CREDIT = 0.1
 RELATIVE_TOLERANCE = 1e-3
 GINI_TOLERANCE = 1e-5
 POVERTY_TOLERANCE = 1e-6
@@ -57,9 +54,24 @@ SENIOR_POVERTY_TOLERANCE = 1e-4
 # Reform differences match the API to the dollar, but the local and API income
 # levels differ by a constant, so a few households change decile near the top.
 DECILE_MEAN_TOLERANCE = 2.0
+# The weights save in single precision, so their ratio carries that much noise.
+WEIGHT_GROWTH_TOLERANCE = 1e-5
+SAMPLING_DRAWS = 200
+SAMPLING_SEED = 0
+# Cells these tables leave empty on purpose: the ladder's first rungs have no
+# step, the Census Bureau publishes no credit figures, and a decile row has no
+# percent of negative income and no mean across zero recipients.
+DECILE_BLANKS = ["percent_of_income", "mean_per_receiving_household"]
+BLANK_COLUMNS = {
+    "march_2025_ladder": ["step"],
+    "data_comparison_2026": ["census_2023"],
+    "deciles_by_component_2026": DECILE_BLANKS,
+    "deciles_by_data_file_2026": DECILE_BLANKS,
+}
 CAREGIVER_AGE = 18
 PRIMARY_YEAR = 2026
-CHECK_YEARS = (2026, 2035)
+LAST_YEAR = 2035
+CHECK_YEARS = (PRIMARY_YEAR, LAST_YEAR)
 CREDIT = "tax_unit.family_income_supplement_credit"
 BASE = "tax_unit.family_income_supplement_credit_base_amount"
 HOUSEHOLD_CREDIT = "household.family_income_supplement_credit"
@@ -82,15 +94,28 @@ def api_result(policy: int, baseline: int, year: int) -> dict:
     return json.loads((API / f"econ_{policy}_over_{baseline}_{year}.json").read_text())
 
 
-def load(work: Path, scenario: str, year: int) -> dict[str, np.ndarray]:
-    """Read a run with its floats widened, since float32 sums lose dollars."""
-    arrays = np.load(work / f"{scenario}_{year}.npz")
-    return {
-        name: arrays[name].astype(float)
-        if arrays[name].dtype == np.float32
-        else arrays[name]
-        for name in arrays
+def read_arrays(path: Path) -> dict[str, np.ndarray]:
+    """Read saved arrays with their floats widened, since float32 sums lose dollars."""
+    saved = np.load(path)
+    arrays = {
+        name: saved[name].astype(float)
+        if saved[name].dtype == np.float32
+        else saved[name]
+        for name in saved
     }
+    for name, values in arrays.items():
+        if np.issubdtype(values.dtype, np.floating) and not np.isfinite(values).all():
+            raise AssertionError(f"{path.name}: {name} is not finite")
+    return arrays
+
+
+def load(work: Path, scenario: str, year: int) -> dict[str, np.ndarray]:
+    return read_arrays(work / f"{scenario}_{year}.npz")
+
+
+def load_detail(detail: Path, scenario: str) -> dict[str, np.ndarray]:
+    """The poverty and state tax arrays run.py --detail saves beside a run."""
+    return read_arrays(detail / f"{scenario}_{PRIMARY_YEAR}_detail.npz")
 
 
 def weighted_sum(run: dict[str, np.ndarray], name: str) -> float:
@@ -196,7 +221,7 @@ def provision_comparison() -> pd.DataFrame:
 
 def poverty_rates(arrays) -> dict[str, float]:
     """Share of people in SPM poverty, overall and by the API's age groups."""
-    weight = arrays["person_weight"].astype(float)
+    weight = arrays["person_weight"]
     in_poverty = arrays["person_in_poverty"].astype(float)
     age = arrays["age"]
     child = age < CHILD_AGE
@@ -213,32 +238,77 @@ def poverty_rates(arrays) -> dict[str, float]:
     }
 
 
+def rebuilt_poverty(detail: dict[str, np.ndarray]) -> np.ndarray:
+    """Each person's poverty flag, from their SPM unit's income and threshold."""
+    poor = pd.Series(
+        detail["spm_unit_net_income"] < detail["spm_unit_spm_threshold"],
+        index=detail["spm_unit_id"],
+    )
+    return poor.reindex(detail["person_spm_unit_id"]).to_numpy()
+
+
+def spm_income_by_household(
+    run: dict[str, np.ndarray], detail: dict[str, np.ndarray]
+) -> np.ndarray:
+    """Add SPM unit net income up to households through the person links."""
+    links = pd.DataFrame(
+        {
+            "spm_unit": detail["person_spm_unit_id"],
+            "household": run["person.person_household_id"],
+        }
+    ).drop_duplicates()
+    if links.spm_unit.duplicated().any():
+        raise AssertionError("an SPM unit spans two households")
+    household = links.set_index("spm_unit").household
+    totals = (
+        pd.Series(
+            detail["spm_unit_net_income"],
+            index=household.reindex(detail["spm_unit_id"]).to_numpy(),
+        )
+        .groupby(level=0)
+        .sum()
+    )
+    return totals.reindex(run["household.household_id"], fill_value=0.0).to_numpy()
+
+
 def check_poverty_run(
     with_cap: dict[str, np.ndarray],
     without_cap: dict[str, np.ndarray],
-    people_with: dict[str, np.ndarray],
-    people_without: dict[str, np.ndarray],
-) -> None:
-    """Removing the cap can only lift people out, in households it pays."""
-    for name in ("age", "person_weight"):
-        if not np.array_equal(people_with[name], people_without[name]):
+    detail_with: dict[str, np.ndarray],
+    detail_without: dict[str, np.ndarray],
+) -> dict:
+    """Tie each run's poverty flags to its incomes, and those incomes to the credit."""
+    for name in ("age", "person_weight", "person_spm_unit_id", "spm_unit_id"):
+        if not np.array_equal(detail_with[name], detail_without[name]):
             raise AssertionError("the poverty files hold different people")
-    poor_with = people_with["person_in_poverty"].astype(bool)
-    poor_without = people_without["person_in_poverty"].astype(bool)
+    if not np.array_equal(
+        detail_with["spm_unit_spm_threshold"], detail_without["spm_unit_spm_threshold"]
+    ):
+        raise AssertionError("removing the cap moved a poverty threshold")
+    for detail in (detail_with, detail_without):
+        if not np.array_equal(detail["person_in_poverty"], rebuilt_poverty(detail)):
+            raise AssertionError("a poverty flag misses its income and threshold")
+
+    gap = np.abs(
+        (
+            spm_income_by_household(without_cap, detail_without)
+            - spm_income_by_household(with_cap, detail_with)
+        )
+        - (without_cap[NET_INCOME] - with_cap[NET_INCOME])
+    )
+    if gap.max() > DOLLAR_TOLERANCE:
+        raise AssertionError("SPM income moved apart from household net income")
+
+    poor_with = detail_with["person_in_poverty"]
+    poor_without = detail_without["person_in_poverty"]
     if (poor_without & ~poor_with).any():
         raise AssertionError("removing the cap moved someone into poverty")
-    lifted = poor_with & ~poor_without
-    if not lifted.any():
+    if not (poor_with & ~poor_without).any():
         raise AssertionError("removing the cap lifted no one out of poverty")
-    gain = pd.Series(
-        without_cap[NET_INCOME] - with_cap[NET_INCOME],
-        index=with_cap["household.household_id"],
-    )
-    if (gain.reindex(with_cap["person.person_household_id"][lifted]) <= 0).any():
-        raise AssertionError("someone left poverty in a household with no gain")
+    return {"agi_cap_largest_household_gap_from_spm_income": float(gap.max())}
 
 
-def agi_cap_provision(work: Path, poverty: Path) -> dict:
+def agi_cap_provision(work: Path, detail: Path) -> tuple[dict, dict]:
     """The AGI cap's row, from local runs, since no API policy removes all of it.
 
     Each row of provisions_2026.csv ranks deciles on income without the
@@ -247,11 +317,11 @@ def agi_cap_provision(work: Path, poverty: Path) -> dict:
     fisc = load(work, "fisc", PRIMARY_YEAR)
     uncapped = load(work, "fisc_no_agi_cap", PRIMARY_YEAR)
     weight = fisc["household.household_weight"]
-    people_with = np.load(poverty / f"fisc_{PRIMARY_YEAR}_poverty.npz")
-    people_without = np.load(work / f"fisc_no_agi_cap_{PRIMARY_YEAR}_poverty.npz")
-    check_poverty_run(fisc, uncapped, people_with, people_without)
-    rates_with = poverty_rates(people_with)
-    rates_without = poverty_rates(people_without)
+    detail_with = load_detail(detail, "fisc")
+    detail_without = load_detail(detail, "fisc_no_agi_cap")
+    invariants = check_poverty_run(fisc, uncapped, detail_with, detail_without)
+    rates_with = poverty_rates(detail_with)
+    rates_without = poverty_rates(detail_without)
     api = api_result(FISC, CURRENT_LAW, PRIMARY_YEAR)["poverty"]["poverty"]
     for group, tolerance in (
         ("child", POVERTY_TOLERANCE),
@@ -279,7 +349,7 @@ def agi_cap_provision(work: Path, poverty: Path) -> dict:
         uncapped[NET_INCOME],
         weight,
     ).set_index("group")
-    return {
+    row = {
         "provision": "agi_cap",
         "net_cost": cost,
         "gini_without": gini_without,
@@ -295,6 +365,7 @@ def agi_cap_provision(work: Path, poverty: Path) -> dict:
             for d in range(1, 11)
         },
     }
+    return row, invariants
 
 
 def credit_gaps_from_the_bill(run: dict[str, np.ndarray], rate: float) -> dict:
@@ -341,8 +412,13 @@ def household_totals(run: dict[str, np.ndarray], amount: np.ndarray) -> np.ndarr
     return totals.reindex(run["household.household_id"], fill_value=0.0).to_numpy()
 
 
-def check_accounting(reform: dict, baseline: dict, label: str) -> dict:
-    """Check two runs against each other for every tax unit and household."""
+def check_accounting(
+    reform: dict, baseline: dict, label: str, state_tax: np.ndarray
+) -> dict:
+    """Check two runs against each other for every tax unit and household.
+
+    state_tax holds each tax unit's change in state income tax.
+    """
     results: dict[str, object] = {}
     for entity in ("tax_unit", "household"):
         name = f"{entity}.{entity}_weight"
@@ -374,15 +450,30 @@ def check_accounting(reform: dict, baseline: dict, label: str) -> dict:
     credit_by_household = household_totals(reform, reform[CREDIT]) - household_totals(
         baseline, baseline[CREDIT]
     )
-    state_tax = np.abs(change(NET_INCOME) - credit_by_household)
-    limit = STATE_TAX_SHARE_OF_CREDIT * np.abs(credit_by_household) + DOLLAR_TOLERANCE
-    if (state_tax > limit).any():
+    if (state_tax[credit == 0] != 0).any():
+        raise AssertionError(f"{label}: state tax moved with no credit behind it")
+    gap = np.abs(
+        change(NET_INCOME) - (credit_by_household - household_totals(reform, state_tax))
+    )
+    if gap.max() > DOLLAR_TOLERANCE:
         raise AssertionError(f"{label}: net income moved apart from the credit")
-    results[f"{label}_largest_household_gap_from_the_credit"] = float(state_tax.max())
+    results[f"{label}_largest_household_gap_from_credit_and_state_tax"] = float(
+        gap.max()
+    )
+    results[f"{label}_state_income_tax_change"] = float(
+        (state_tax * reform["tax_unit.tax_unit_weight"]).sum()
+    )
     return results
 
 
-def check_agi_cap_run(work: Path) -> dict:
+def state_tax_change(detail: Path, reform: str, baseline: str) -> np.ndarray:
+    return (
+        load_detail(detail, reform)["state_income_tax"]
+        - load_detail(detail, baseline)["state_income_tax"]
+    )
+
+
+def check_agi_cap_run(work: Path, detail: Path) -> dict:
     """The uncapped run must pay the uncapped credit at every AGI."""
     fisc = load(work, "fisc", PRIMARY_YEAR)
     uncapped = load(work, "fisc_no_agi_cap", PRIMARY_YEAR)
@@ -403,10 +494,12 @@ def check_agi_cap_run(work: Path) -> dict:
         "credit_the_agi_cap_removes_at_zero_or_negative_agi": float(
             removed[at_or_below_zero].sum()
         ),
-    } | check_accounting(uncapped, fisc, "agi_cap")
+    } | check_accounting(
+        uncapped, fisc, "agi_cap", state_tax_change(detail, "fisc_no_agi_cap", "fisc")
+    )
 
 
-def check_invariants(work: Path, rerun: Path) -> dict:
+def check_invariants(work: Path, rerun: Path, detail: Path) -> dict:
     fisc = load(work, "fisc", PRIMARY_YEAR)
     no_bonus = load(work, "fisc_no_bonus", PRIMARY_YEAR)
     restored = load(work, "fisc_restored_bonus", PRIMARY_YEAR)
@@ -437,7 +530,8 @@ def check_invariants(work: Path, rerun: Path) -> dict:
 
     results |= credit_gaps_from_the_bill(fisc, STATUTORY_BONUS_RATE)
     credit_gaps_from_the_bill(no_bonus, 0.0)
-    results |= check_accounting(fisc, no_bonus, "bonus")
+    state_tax = state_tax_change(detail, "fisc", "fisc_no_bonus")
+    results |= check_accounting(fisc, no_bonus, "bonus", state_tax)
 
     weight = fisc["tax_unit.tax_unit_weight"]
     by_credit = float((bonus * weight).sum())
@@ -468,6 +562,30 @@ def check_invariants(work: Path, rerun: Path) -> dict:
     return results
 
 
+def check_the_decade(work: Path) -> dict:
+    """The later years keep every family as it stands and scale all weights alike."""
+    first = load(work, "fisc", PRIMARY_YEAR)
+    last = load(work, "fisc", LAST_YEAR)
+    for name in (
+        "tax_unit.age_head",
+        "tax_unit.age_spouse",
+        "tax_unit.joint",
+        BASE,
+        "household.household_count_people",
+    ):
+        if not np.array_equal(first[name], last[name]):
+            raise AssertionError(f"the later years changed {name}")
+    growth = np.concatenate(
+        [
+            last[f"{entity}.{entity}_weight"] / first[f"{entity}.{entity}_weight"]
+            for entity in ("household", "tax_unit")
+        ]
+    )
+    if growth.max() - growth.min() > WEIGHT_GROWTH_TOLERANCE:
+        raise AssertionError("the later years scaled weights unevenly")
+    return {"weight_growth_from_2026_to_2035": float(growth.mean())}
+
+
 def bonus_gap_from_api(work: Path, year: int) -> dict:
     """Compare one year's bonus with the API and check who receives it."""
     fisc = load(work, "fisc", year)
@@ -487,6 +605,24 @@ def bonus_gap_from_api(work: Path, year: int) -> dict:
     if abs(local - api) > RELATIVE_TOLERANCE * abs(api):
         raise AssertionError(f"local and API runs disagree on the {year} bonus")
     return {f"bonus_local_{year}": local, f"bonus_api_{year}": api}
+
+
+def check_state_tax_against_api(detail: Path) -> dict:
+    """The saved state income tax must add up to the API's change."""
+    fisc = load_detail(detail, "fisc")
+    no_bonus = load_detail(detail, "fisc_no_bonus")
+    weights = np.load(detail / f"fisc_{PRIMARY_YEAR}.npz")["tax_unit.tax_unit_weight"]
+    local = float(
+        ((fisc["state_income_tax"] - no_bonus["state_income_tax"]) * weights).sum()
+    )
+    api = float(
+        api_result(FISC, NO_BONUS, PRIMARY_YEAR)["detailed_budget"]["state_income_tax"][
+            "difference"
+        ]
+    )
+    if abs(local - api) > RELATIVE_TOLERANCE * abs(api):
+        raise AssertionError("local and API runs disagree on state income tax")
+    return {"bonus_state_income_tax_local": local, "bonus_state_income_tax_api": api}
 
 
 def check_against_api(work: Path) -> dict:
@@ -852,7 +988,7 @@ def children_in_joint_units(
     joint = pd.Series(
         run["tax_unit.joint"].astype(bool), index=run["tax_unit.tax_unit_id"]
     )
-    weight = people["person_weight"].astype(float)
+    weight = people["person_weight"]
     child = people["age"] < CHILD_AGE
     in_joint_unit = joint.reindex(run["person.person_tax_unit_id"]).to_numpy()
     return {
@@ -929,13 +1065,60 @@ def distribution_lines(folder: Path) -> dict:
     return lines
 
 
-def data_comparison(ecps: Path, cps: Path, work: Path, poverty: Path) -> pd.DataFrame:
+def sampling_spread(folder: Path) -> pd.DataFrame:
+    """How far a fresh draw could move the figures on a file saved as weighted draws.
+
+    The CPS file holds households drawn with replacement in proportion to their
+    Census weights, and each saved weight counts a household's draws. Redrawing the
+    same number from those households shows the spread a sample that size carries.
+    """
+    current = load(folder, "baseline", PRIMARY_YEAR)
+    fisc = load(folder, "fisc", PRIMARY_YEAR)
+    no_bonus = load(folder, "fisc_no_bonus", PRIMARY_YEAR)
+    weight = current["household.household_weight"]
+    people = current["household.household_count_people"]
+    income = current[NET_INCOME]
+    bonus = fisc[HOUSEHOLD_CREDIT] - no_bonus[HOUSEHOLD_CREDIT]
+    draw_weight = weight.min()
+    draws = np.rint(weight / draw_weight)
+    if (np.abs(weight / draw_weight - draws) > RELATIVE_TOLERANCE).any():
+        raise AssertionError("the saved weights do not count draws")
+    generator = np.random.default_rng(SAMPLING_SEED)
+    redraws = generator.multinomial(
+        int(draws.sum()), draws / draws.sum(), size=SAMPLING_DRAWS
+    )
+
+    def lines(redrawn: np.ndarray) -> dict[str, float]:
+        groups = weighted_decile(income, redrawn, people)
+        shares = group_shares(decile_table(groups, bonus, income, redrawn))
+        return {
+            "bonus": float((bonus * redrawn).sum()),
+            "bonus_share_of_bottom_five_deciles": shares["bottom_five_deciles"],
+            "bonus_share_of_top_three_deciles": shares["top_three_deciles"],
+        }
+
+    spread = pd.DataFrame([lines(draw_weight * counts) for counts in redraws])
+    return (
+        pd.DataFrame(
+            {
+                "saved_file": pd.Series(lines(weight)),
+                "standard_deviation": spread.std(),
+                "lowest_redraw": spread.min(),
+                "highest_redraw": spread.max(),
+            }
+        )
+        .rename_axis("line")
+        .reset_index()
+    )
+
+
+def data_comparison(ecps: Path, cps: Path, work: Path, detail: Path) -> pd.DataFrame:
     """The same model and reform on each data file, against the Census Bureau."""
     columns = {}
     for label, folder, person_file in (
         ("march_2025_data", ecps, ecps / f"fisc_{PRIMARY_YEAR}_people.npz"),
         ("cps_2024_data", cps, cps / f"fisc_{PRIMARY_YEAR}_people.npz"),
-        ("todays_data", work, poverty / f"fisc_{PRIMARY_YEAR}_poverty.npz"),
+        ("todays_data", work, detail / f"fisc_{PRIMARY_YEAR}_detail.npz"),
     ):
         fisc = load(folder, "fisc", PRIMARY_YEAR)
         no_bonus = load(folder, "fisc_no_bonus", PRIMARY_YEAR)
@@ -954,7 +1137,7 @@ def data_comparison(ecps: Path, cps: Path, work: Path, poverty: Path) -> pd.Data
             "statutory_bonus": STATUTORY_BONUS_RATE * joint_base,
             "bonus": float(((fisc[CREDIT] - no_bonus[CREDIT]) * weight).sum()),
             "credit": float((fisc[CREDIT] * weight).sum()),
-            **children_in_joint_units(fisc, np.load(person_file)),
+            **children_in_joint_units(fisc, read_arrays(person_file)),
             **distribution_lines(folder),
         }
     columns["census_2023"] = {
@@ -971,17 +1154,24 @@ def data_comparison(ecps: Path, cps: Path, work: Path, poverty: Path) -> pd.Data
 
 
 def check_the_answer_on_every_file(table: pd.DataFrame) -> dict:
-    """The regressivity answer must hold on each data file, not only the current one."""
+    """The regressivity answer must hold on each data file, on both rankings."""
     lines = table.set_index("line")
     results = {}
     for label in ("march_2025_data", "cps_2024_data", "todays_data"):
-        column = lines[label]
+        column = lines[label].dropna()
+        if len(column) < len(lines[label]) or not np.isfinite(column).all():
+            raise AssertionError(f"{label}: a line is not finite")
         if column["gini_with_the_bonus"] >= column["gini_without_the_bonus"]:
             raise AssertionError(f"{label}: the bonus does not narrow the Gini")
-        if column["bonus_concentration"] >= column["household_income_gini"]:
-            raise AssertionError(f"{label}: the bonus concentrates above income")
-        if column["bonus_concentration"] <= column["rest_of_credit_concentration"]:
-            raise AssertionError(f"{label}: the bonus reaches lower than the rest")
+        for income_gini, suffix in (
+            ("household_income_gini", ""),
+            ("equivalised_income_gini", "_equivalised"),
+        ):
+            bonus = column[f"bonus_concentration{suffix}"]
+            if bonus >= column[income_gini]:
+                raise AssertionError(f"{label}: the bonus concentrates above income")
+            if bonus <= column[f"rest_of_credit_concentration{suffix}"]:
+                raise AssertionError(f"{label}: the bonus reaches lower than the rest")
         if (
             column["bonus_share_of_bottom_five_deciles"]
             >= column["rest_of_credit_share_of_bottom_five_deciles"]
@@ -993,21 +1183,35 @@ def check_the_answer_on_every_file(table: pd.DataFrame) -> dict:
     return results
 
 
+def check_tables_are_finite(tables: dict[str, pd.DataFrame]) -> None:
+    """Every numeric cell must hold a number, apart from the ones left blank."""
+    for name, table in tables.items():
+        numbers = table.drop(columns=BLANK_COLUMNS.get(name, [])).select_dtypes(
+            "number"
+        )
+        if not np.isfinite(numbers.to_numpy(dtype=float)).all():
+            raise AssertionError(f"{name}: a cell is not finite")
+
+
 def main(
-    work: Path, rerun: Path, march: Path, ecps: Path, cps: Path, poverty: Path
+    work: Path, rerun: Path, march: Path, ecps: Path, cps: Path, detail: Path
 ) -> None:
     marker = RESULTS / "invariants.json"
     marker.unlink(missing_ok=True)
     invariants = (
-        check_invariants(work, rerun)
-        | check_agi_cap_run(work)
+        check_invariants(work, rerun, detail)
+        | check_agi_cap_run(work, detail)
         | check_against_api(work)
+        | check_state_tax_against_api(detail)
+        | check_the_decade(work)
     )
-    comparison = data_comparison(ecps, cps, work, poverty)
+    comparison = data_comparison(ecps, cps, work, detail)
     invariants |= check_the_answer_on_every_file(comparison)
     years, ladder, orders = reconciliation(march, ecps, work)
+    agi_cap_row, poverty_invariants = agi_cap_provision(work, detail)
+    invariants |= poverty_invariants
     provisions = pd.concat(
-        [provision_comparison(), pd.DataFrame([agi_cap_provision(work, poverty)])],
+        [provision_comparison(), pd.DataFrame([agi_cap_row])],
         ignore_index=True,
     )
     indexed = {"budget_by_year": budget_by_year(), "march_2025_comparison": years}
@@ -1022,7 +1226,9 @@ def main(
         "march_2025_step_orders": orders,
         "data_comparison_2026": comparison,
         "deciles_by_data_file_2026": deciles_by_data_file(ecps, cps, work),
+        "cps_sampling_spread_2026": sampling_spread(cps),
     }
+    check_tables_are_finite(indexed | plain)
     for name, table in indexed.items():
         table.to_csv(RESULTS / f"{name}.csv")
     for name, table in plain.items():
@@ -1041,6 +1247,6 @@ if __name__ == "__main__":
     parser.add_argument("--march", type=Path, required=True)
     parser.add_argument("--ecps", type=Path, required=True)
     parser.add_argument("--cps", type=Path, required=True)
-    parser.add_argument("--poverty", type=Path, required=True)
+    parser.add_argument("--detail", type=Path, required=True)
     args = parser.parse_args()
-    main(args.work, args.rerun, args.march, args.ecps, args.cps, args.poverty)
+    main(args.work, args.rerun, args.march, args.ecps, args.cps, args.detail)

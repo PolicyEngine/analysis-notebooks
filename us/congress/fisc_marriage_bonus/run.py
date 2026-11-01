@@ -53,7 +53,17 @@ REFORM_ONLY_VARIABLES = (
 )
 CURRENT_LAW_ONLY_VARIABLES = ("refundable_ctc", "non_refundable_ctc")
 PEOPLE_VARIABLES = ("age", "person_weight")
-POVERTY_VARIABLES = ("person_in_poverty", *PEOPLE_VARIABLES)
+# The poverty flag with what the model builds it from, and the state income tax
+# that moves with the federal credit. summarize.py rebuilds both chains from these.
+DETAIL_VARIABLES = (
+    *PEOPLE_VARIABLES,
+    "person_in_poverty",
+    "person_spm_unit_id",
+    "spm_unit_id",
+    "spm_unit_net_income",
+    "spm_unit_spm_threshold",
+    "state_income_tax",
+)
 CAREGIVER_AGE = 18
 
 
@@ -104,7 +114,7 @@ def run(
     year: int,
     out: Path,
     dataset: str | None = None,
-    poverty: bool = False,
+    detail: bool = False,
     people: bool = False,
 ) -> Path:
     policy = SCENARIOS[scenario]
@@ -140,10 +150,10 @@ def run(
             out / f"{scenario}_{year}_people.npz",
             **{name: calculate(name) for name in PEOPLE_VARIABLES},
         )
-    if poverty:
+    if detail:
         np.savez_compressed(
-            out / f"{scenario}_{year}_poverty.npz",
-            **{name: calculate(name) for name in POVERTY_VARIABLES},
+            out / f"{scenario}_{year}_detail.npz",
+            **{name: calculate(name) for name in DETAIL_VARIABLES},
         )
     bundle = dict(getattr(sim, "policyengine_bundle", {}))
     (out / f"{scenario}_{year}.json").write_text(
@@ -166,9 +176,9 @@ if __name__ == "__main__":
         help="Path to a dataset outside the bundle, for the reconciliation only.",
     )
     parser.add_argument(
-        "--poverty",
+        "--detail",
         action="store_true",
-        help="Also save person poverty arrays, for scenarios the API cannot run.",
+        help="Also save the poverty and state tax arrays summarize.py rebuilds.",
     )
     parser.add_argument(
         "--people",
@@ -177,5 +187,5 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     print(
-        run(args.scenario, args.year, args.out, args.dataset, args.poverty, args.people)
+        run(args.scenario, args.year, args.out, args.dataset, args.detail, args.people)
     )

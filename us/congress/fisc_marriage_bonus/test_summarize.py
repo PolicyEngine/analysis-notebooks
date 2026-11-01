@@ -9,12 +9,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+import summarize
 from analysis import closed_form_credit
 from summarize import (
     BASE,
     CREDIT,
     NET_INCOME,
     PRIMARY_YEAR,
+    bonus_gap_from_api,
     bonus_reach,
     check_invariants,
     distribution,
@@ -147,6 +149,44 @@ class TestInvariants:
                 save(rerun, scenario, run)
         results = check_invariants(work, rerun)
         assert results["tax_units_with_a_child_and_no_adult_caregiver"] == 1_000
+
+
+class TestBonusGapFromApi:
+    @pytest.fixture
+    def api(self, runs, monkeypatch):
+        work, _ = runs
+        bonus = sum(
+            1_000 * (fake_run(0.2)[CREDIT][i] - fake_run(0.0)[CREDIT][i])
+            for i in range(N)
+        )
+        monkeypatch.setattr(
+            summarize,
+            "api_result",
+            lambda *_: {"detailed_budget": {"income_tax": {"difference": -bonus}}},
+        )
+        return work, bonus
+
+    def test_matching_runs_pass(self, api):
+        work, bonus = api
+        result = bonus_gap_from_api(work, PRIMARY_YEAR)
+        assert result[f"bonus_local_{PRIMARY_YEAR}"] == pytest.approx(bonus)
+
+    def test_a_bonus_off_the_api_fails(self, api):
+        work, _ = api
+        run = fake_run(0.0)
+        run["tax_unit.income_tax"] = run["tax_unit.income_tax"] + 1_000
+        save(work, "fisc_no_bonus", run)
+        with pytest.raises(AssertionError, match="disagree"):
+            bonus_gap_from_api(work, PRIMARY_YEAR)
+
+    def test_a_bonus_for_an_unmarried_unit_fails(self, api):
+        work, _ = api
+        fisc = fake_run(0.2)
+        unmarried = np.flatnonzero(~fisc["tax_unit.joint"] & (fisc[BASE] > 0))[0]
+        fisc[CREDIT][unmarried] += 100
+        save(work, "fisc", fisc)
+        with pytest.raises(AssertionError, match="unmarried"):
+            bonus_gap_from_api(work, PRIMARY_YEAR)
 
 
 class TestDistribution:

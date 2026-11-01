@@ -238,6 +238,27 @@ def check_invariants(work: Path, rerun: Path) -> dict:
     return results
 
 
+def bonus_gap_from_api(work: Path, year: int) -> dict:
+    """Compare one year's bonus with the API and check who receives it."""
+    fisc = load(work, "fisc", year)
+    no_bonus = load(work, "fisc_no_bonus", year)
+    bonus = fisc[CREDIT] - no_bonus[CREDIT]
+    if (bonus[~fisc["tax_unit.joint"].astype(bool)] != 0).any():
+        raise AssertionError(f"an unmarried tax unit received the bonus in {year}")
+    local = float(
+        (
+            (no_bonus["tax_unit.income_tax"] - fisc["tax_unit.income_tax"])
+            * fisc["tax_unit.tax_unit_weight"]
+        ).sum()
+    )
+    api = -float(
+        api_result(FISC, NO_BONUS, year)["detailed_budget"]["income_tax"]["difference"]
+    )
+    if abs(local - api) > RELATIVE_TOLERANCE * abs(api):
+        raise AssertionError(f"local and API runs disagree on the {year} bonus")
+    return {f"bonus_local_{year}": local, f"bonus_api_{year}": api}
+
+
 def check_against_api(work: Path) -> dict:
     """Differential check: the local runs against the production API."""
     current = load(work, "baseline", PRIMARY_YEAR)
@@ -246,17 +267,8 @@ def check_against_api(work: Path) -> dict:
     results: dict[str, object] = {}
 
     direct = api_result(FISC, NO_BONUS, PRIMARY_YEAR)
-    local_bonus = float(
-        (
-            (no_bonus["tax_unit.income_tax"] - fisc["tax_unit.income_tax"])
-            * fisc["tax_unit.tax_unit_weight"]
-        ).sum()
-    )
-    api_bonus = -float(direct["detailed_budget"]["income_tax"]["difference"])
-    results["bonus_local"] = local_bonus
-    results["bonus_api"] = api_bonus
-    if abs(local_bonus - api_bonus) > RELATIVE_TOLERANCE * abs(api_bonus):
-        raise AssertionError("local and API runs disagree on the bonus")
+    for year in CHECK_YEARS:
+        results |= bonus_gap_from_api(work, year)
 
     comparisons = {
         "bonus_over_fisc_no_bonus": (fisc, no_bonus, direct),

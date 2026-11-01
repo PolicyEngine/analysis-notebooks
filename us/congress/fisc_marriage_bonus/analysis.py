@@ -22,9 +22,10 @@ BONUS_RATE = f"{SUPPLEMENT}.marriage_bonus_rate"
 # parameter but the bonus.
 FISC_POLICY = {f"{FISC}.in_effect": {PERIOD: 0.01}}
 
-# Each variant changes one provision of the full reform. The no-cap variant
-# leaves the cap at zero for tax units with zero or negative AGI, because the
-# reform floors the cap at zero; it sets a fraction no AGI above $1 can reach.
+# Each variant changes one provision of the full reform. No parameter can lift
+# the cap at zero or negative AGI, because the reform floors the cap at zero, so
+# fisc_agi_cap_at_zero_only lifts it above zero AGI, which the API can run, and
+# run.py removes it at every AGI for fisc_no_agi_cap.
 SCENARIOS: dict[str, dict] = {
     "baseline": {},
     "fisc": FISC_POLICY,
@@ -39,7 +40,11 @@ SCENARIOS: dict[str, dict] = {
         f"{SUPPLEMENT}.phase_out.joint[1].rate": {PERIOD: 0},
         f"{SUPPLEMENT}.phase_out.other[1].rate": {PERIOD: 0},
     },
-    "fisc_no_agi_cap": {**FISC_POLICY, f"{SUPPLEMENT}.agi_fraction": {PERIOD: 1e9}},
+    "fisc_agi_cap_at_zero_only": {
+        **FISC_POLICY,
+        f"{SUPPLEMENT}.agi_fraction": {PERIOD: 1e9},
+    },
+    "fisc_no_agi_cap": FISC_POLICY,
     "fisc_ctc_repeal_only": {
         **FISC_POLICY,
         f"{SUPPLEMENT}.amount.base[0].amount": {PERIOD: 0},
@@ -70,6 +75,23 @@ SCENARIOS["baseline_march_2025_ctc"] = MARCH_2025_CTC
 # A dollar test keeps float32 rounding from counting as receipt.
 RECEIPT_THRESHOLD = 0.005
 NEGATIVE_INCOME_GROUP = -1
+BILL_MONTHLY_PHASE_OUT_STEP = 16.67
+
+
+def uncapped_credit(
+    base_amount: np.ndarray,
+    joint: np.ndarray,
+    agi: np.ndarray,
+    bonus_rate: float = STATUTORY_BONUS_RATE,
+) -> np.ndarray:
+    """The model's annual credit after the bonus and phase-out, before the cap."""
+    base_amount = np.asarray(base_amount, dtype=float)
+    joint = np.asarray(joint, dtype=bool)
+    agi = np.asarray(agi, dtype=float)
+    with_bonus = base_amount * (1 + joint * bonus_rate)
+    threshold = np.where(joint, 250_000, 125_000)
+    phase_out = 0.2 * np.maximum(agi - threshold, 0)
+    return np.maximum(with_bonus - phase_out, 0)
 
 
 def closed_form_credit(
@@ -78,18 +100,34 @@ def closed_form_credit(
     agi: np.ndarray,
     bonus_rate: float = STATUTORY_BONUS_RATE,
 ) -> np.ndarray:
-    """H.R. 1308 Sec. 2(d) as an annual formula, in the bill's order.
+    """The model's annual reading of H.R. 1308 Sec. 2(d), in the bill's order.
 
     (d)(2) raises the payment by the bonus, (d)(3) phases it out and (d)(4)
-    caps it at AGI. The test suite checks the model against this reference.
+    caps it at AGI. The model replaces the bill's monthly steps with a smooth
+    20 cents per dollar, and stepped_credit shows the bill's steps.
     """
+    capped = np.minimum(
+        uncapped_credit(base_amount, joint, agi, bonus_rate),
+        np.maximum(np.asarray(agi, dtype=float), 0),
+    )
+    return capped
+
+
+def stepped_credit(
+    base_amount: np.ndarray,
+    joint: np.ndarray,
+    agi: np.ndarray,
+    bonus_rate: float = STATUTORY_BONUS_RATE,
+) -> np.ndarray:
+    """Sec. 2(d) with the bill's phase-out, $16.67 a month per whole $1,000."""
     base_amount = np.asarray(base_amount, dtype=float)
     joint = np.asarray(joint, dtype=bool)
     agi = np.asarray(agi, dtype=float)
-    with_bonus = base_amount * (1 + joint * bonus_rate)
     threshold = np.where(joint, 250_000, 125_000)
-    phase_out = 0.2 * np.maximum(agi - threshold, 0)
-    return np.minimum(np.maximum(with_bonus - phase_out, 0), np.maximum(agi, 0))
+    steps = np.floor(np.maximum(agi - threshold, 0) / 1_000)
+    with_bonus = base_amount * (1 + joint * bonus_rate)
+    reduced = np.maximum(with_bonus - 12 * BILL_MONTHLY_PHASE_OUT_STEP * steps, 0)
+    return np.minimum(reduced, np.maximum(agi, 0))
 
 
 def closed_form_bonus(
@@ -153,10 +191,12 @@ def decile_table(
     amount: np.ndarray,
     income: np.ndarray,
     household_weight: np.ndarray,
+    people: np.ndarray | None = None,
 ) -> pd.DataFrame:
     """Dollars, shares and receipt by income group, one row per group.
 
     The negative-income group keeps its own row so the rows sum to the total.
+    Pass people to add the mean per person.
     """
     frame = pd.DataFrame(
         {
@@ -164,17 +204,22 @@ def decile_table(
             "amount": np.asarray(amount, dtype=float),
             "income": np.asarray(income, dtype=float),
             "weight": np.asarray(household_weight, dtype=float),
+            "people": 1.0 if people is None else np.asarray(people, dtype=float),
         }
     )
     frame["dollars"] = frame.amount * frame.weight
     frame["income_dollars"] = frame.income * frame.weight
     frame["receiving"] = frame.weight * (frame.amount.abs() > RECEIPT_THRESHOLD)
+    frame["weighted_people"] = frame.people * frame.weight
     table = frame.groupby("group", sort=True).agg(
         households=("weight", "sum"),
         households_receiving=("receiving", "sum"),
         dollars=("dollars", "sum"),
         income_dollars=("income_dollars", "sum"),
+        weighted_people=("weighted_people", "sum"),
     )
+    if people is not None:
+        table["mean_per_person"] = table.dollars / table.weighted_people
     total = table.dollars.sum()
     table["share_of_total"] = table.dollars / total if total else 0.0
     table["share_of_households_receiving"] = (
@@ -191,31 +236,23 @@ def decile_table(
 
 
 def concentration_coefficient(
-    amount: np.ndarray,
-    rank_income: np.ndarray,
-    household_weight: np.ndarray,
-    people: np.ndarray,
+    amount: np.ndarray, rank_income: np.ndarray, weight: np.ndarray
 ) -> float:
-    """Concentration of an amount across people ranked by income.
+    """Concentration of an amount across weighted units ranked by income.
 
-    Each person takes an equal part of the household amount. The coefficient
-    runs from -1, with everything at the bottom, to +1, with everything at the
-    top; zero means an equal amount per person. A positive transfer whose
-    coefficient exceeds the Gini of income raises income by a larger percentage
-    at the top than at the bottom.
+    Units with equal income share a midrank. The coefficient runs from -1, with
+    everything at the bottom, to +1, with everything at the top, and zero means
+    an equal amount per unit. Compare it with the Gini of income in the same
+    units: a positive transfer scoring below that Gini raises income by a larger
+    percentage at the bottom than at the top.
     """
     amount = np.asarray(amount, dtype=float)
-    weight = np.asarray(household_weight, dtype=float) * np.asarray(people, dtype=float)
-    per_person = amount / np.asarray(people, dtype=float)
-    order = np.argsort(np.asarray(rank_income, dtype=float), kind="stable")
-    weight = weight[order]
-    per_person = per_person[order]
-    total_weight = weight.sum()
-    midpoint = (np.cumsum(weight) - weight / 2) / total_weight
-    mean = (weight * per_person).sum() / total_weight
-    return float(
-        2 * (weight * per_person * (midpoint - 0.5)).sum() / total_weight / mean
-    )
+    weight = np.asarray(weight, dtype=float)
+    _, tie_group = np.unique(np.asarray(rank_income, dtype=float), return_inverse=True)
+    group_weight = np.bincount(tie_group, weights=weight)
+    midpoint = (np.cumsum(group_weight) - group_weight / 2) / group_weight.sum()
+    share = weight * amount / (weight * amount).sum()
+    return float(2 * (share * (midpoint[tie_group] - 0.5)).sum())
 
 
 def weighted_gini(income: np.ndarray, weight: np.ndarray) -> float:
@@ -224,7 +261,7 @@ def weighted_gini(income: np.ndarray, weight: np.ndarray) -> float:
     weight = np.asarray(weight, dtype=float)
     if (income * weight).sum() == 0:
         return 0.0
-    return concentration_coefficient(income, income, weight, np.ones(len(income)))
+    return concentration_coefficient(income, income, weight)
 
 
 def group_shares(table: pd.DataFrame) -> dict[str, float]:

@@ -24,6 +24,8 @@ from analysis import (
     concentration_coefficient,
     decile_table,
     group_shares,
+    stepped_credit,
+    uncapped_credit,
     weighted_decile,
     weighted_gini,
 )
@@ -36,13 +38,18 @@ FISC = 76612
 NO_BONUS = 99021
 NO_NEWBORN_ADD_ON = 99022
 NO_PHASE_OUT = 99023
-NO_AGI_CAP = 99024
+AGI_CAP_AT_ZERO_ONLY = 99024
 FISC_CTC_REPEAL_ONLY = 99025
 CURRENT_LAW = 2
 REEVES_ESTIMATE = 30e9
 DOLLAR_TOLERANCE = 1.0
 RELATIVE_TOLERANCE = 1e-3
 GINI_TOLERANCE = 1e-5
+POVERTY_TOLERANCE = 1e-6
+# Local and API rates agree for children and working-age adults, and the local
+# rate for people 65 and over runs 8.6e-5 above the API's, cause untraced. That
+# moves the all-ages rate by 1.5e-5.
+SENIOR_POVERTY_TOLERANCE = 1e-4
 # Reform differences match the API to the dollar, but the local and API income
 # levels differ by a constant, so a few households change decile near the top.
 DECILE_MEAN_TOLERANCE = 2.0
@@ -51,7 +58,11 @@ PRIMARY_YEAR = 2026
 CHECK_YEARS = (2026, 2035)
 CREDIT = "tax_unit.family_income_supplement_credit"
 BASE = "tax_unit.family_income_supplement_credit_base_amount"
+HOUSEHOLD_CREDIT = "household.family_income_supplement_credit"
+INCOME_TAX = "tax_unit.income_tax"
 NET_INCOME = "household.household_net_income"
+CHILD_AGE = 18
+SENIOR_AGE = 65
 
 
 def api_result(policy: int, baseline: int, year: int) -> dict:
@@ -139,7 +150,7 @@ def provision_comparison() -> pd.DataFrame:
         "marriage_bonus": (FISC, NO_BONUS),
         "newborn_add_on": (FISC, NO_NEWBORN_ADD_ON),
         "phase_out": (FISC, NO_PHASE_OUT),
-        "agi_cap": (FISC, NO_AGI_CAP),
+        "agi_cap_above_zero_agi": (FISC, AGI_CAP_AT_ZERO_ONLY),
         "full_fisc": (FISC, CURRENT_LAW),
     }
     rows = []
@@ -170,14 +181,86 @@ def provision_comparison() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def poverty_rates(arrays) -> dict[str, float]:
+    """Share of people in SPM poverty, overall and by the API's age groups."""
+    weight = arrays["person_weight"].astype(float)
+    in_poverty = arrays["person_in_poverty"].astype(float)
+    age = arrays["age"]
+    child = age < CHILD_AGE
+    senior = age >= SENIOR_AGE
+    groups = {
+        "all": np.ones_like(child),
+        "child": child,
+        "adult": ~child & ~senior,
+        "senior": senior,
+    }
+    return {
+        group: float(np.average(in_poverty[member], weights=weight[member]))
+        for group, member in groups.items()
+    }
+
+
+def agi_cap_provision(work: Path, poverty: Path) -> dict:
+    """The AGI cap's row, from local runs, since no API policy removes all of it.
+
+    Each row of provisions_2026.csv ranks deciles on income without the
+    provision, so this one ranks on income in the uncapped run.
+    """
+    fisc = load(work, "fisc", PRIMARY_YEAR)
+    uncapped = load(work, "fisc_no_agi_cap", PRIMARY_YEAR)
+    weight = fisc["household.household_weight"]
+    rates_with = poverty_rates(np.load(poverty / f"fisc_{PRIMARY_YEAR}_poverty.npz"))
+    rates_without = poverty_rates(
+        np.load(work / f"fisc_no_agi_cap_{PRIMARY_YEAR}_poverty.npz")
+    )
+    api = api_result(FISC, CURRENT_LAW, PRIMARY_YEAR)["poverty"]["poverty"]
+    for group, tolerance in (
+        ("child", POVERTY_TOLERANCE),
+        ("adult", POVERTY_TOLERANCE),
+        ("senior", SENIOR_POVERTY_TOLERANCE),
+        ("all", SENIOR_POVERTY_TOLERANCE),
+    ):
+        if abs(rates_with[group] - api[group]["reform"]) > tolerance:
+            raise AssertionError("local and API poverty disagree")
+
+    def net_cost_part(run: dict[str, np.ndarray]) -> np.ndarray:
+        return run["household.household_tax"] - run["household.household_benefits"]
+
+    cost = float(((net_cost_part(uncapped) - net_cost_part(fisc)) * weight).sum())
+    gini_with = household_gini(fisc)
+    gini_without = household_gini(uncapped)
+    change = fisc[NET_INCOME] - uncapped[NET_INCOME]
+    table = decile_table(
+        uncapped["household.household_income_decile"],
+        change,
+        uncapped[NET_INCOME],
+        weight,
+    ).set_index("group")
+    return {
+        "provision": "agi_cap",
+        "net_cost": cost,
+        "gini_without": gini_without,
+        "gini_with": gini_with,
+        "gini_change_per_billion": (gini_with - gini_without) / abs(cost) * 1e9,
+        "poverty_without": rates_without["all"],
+        "poverty_with": rates_with["all"],
+        "child_poverty_without": rates_without["child"],
+        "child_poverty_with": rates_with["child"],
+        **{f"mean_decile_{d}": table.mean_per_household[d] for d in range(1, 11)},
+        **{
+            f"relative_decile_{d}": table.dollars[d] / table.income_dollars[d]
+            for d in range(1, 11)
+        },
+    }
+
+
 def credit_gaps_from_the_bill(run: dict[str, np.ndarray], rate: float) -> dict:
-    """Compare every tax unit's credit with H.R. 1308 Sec. 2(d) at a bonus rate."""
+    """Compare every tax unit's credit with the model's reading of the bill."""
     joint = run["tax_unit.joint"].astype(bool)
     agi = run["tax_unit.adjusted_gross_income"]
     weight = run["tax_unit.tax_unit_weight"]
     formula = closed_form_credit(run[BASE], joint, agi, rate)
-    adults = np.maximum(run["tax_unit.age_head"], run["tax_unit.age_spouse"])
-    caregiver = adults >= CAREGIVER_AGE
+    caregiver = has_caregiver(run)
     if (np.abs(run[CREDIT] - formula * caregiver) > DOLLAR_TOLERANCE).any():
         raise AssertionError("the credit differs from the bill's closed form")
     excluded = (run[BASE] > 0) & ~caregiver
@@ -185,6 +268,90 @@ def credit_gaps_from_the_bill(run: dict[str, np.ndarray], rate: float) -> dict:
         "tax_units_with_a_child_and_no_adult_caregiver": float(weight[excluded].sum()),
         "dollars_the_caregiver_test_removes": float((formula * weight)[excluded].sum()),
     }
+
+
+def has_caregiver(run: dict[str, np.ndarray]) -> np.ndarray:
+    return (
+        np.maximum(run["tax_unit.age_head"], run["tax_unit.age_spouse"])
+        >= CAREGIVER_AGE
+    )
+
+
+def household_totals(run: dict[str, np.ndarray], amount: np.ndarray) -> np.ndarray:
+    """Add a tax-unit amount up to households through the person links."""
+    links = pd.DataFrame(
+        {
+            "tax_unit": run["person.person_tax_unit_id"],
+            "household": run["person.person_household_id"],
+        }
+    ).drop_duplicates()
+    if links.tax_unit.duplicated().any():
+        raise AssertionError("a tax unit spans two households")
+    household = links.set_index("tax_unit").household
+    totals = (
+        pd.Series(
+            amount, index=household.reindex(run["tax_unit.tax_unit_id"]).to_numpy()
+        )
+        .groupby(level=0)
+        .sum()
+    )
+    return totals.reindex(run["household.household_id"], fill_value=0.0).to_numpy()
+
+
+def check_accounting(reform: dict, baseline: dict, label: str) -> dict:
+    """Check two runs against each other for every tax unit and household."""
+    results: dict[str, object] = {}
+    for entity in ("tax_unit", "household"):
+        name = f"{entity}.{entity}_weight"
+        if not np.array_equal(reform[name], baseline[name]):
+            raise AssertionError(f"{label}: {entity} weights differ")
+
+    credit = reform[CREDIT] - baseline[CREDIT]
+    tax_gap = np.abs((baseline[INCOME_TAX] - reform[INCOME_TAX]) - credit)
+    if tax_gap.max() > DOLLAR_TOLERANCE:
+        raise AssertionError(f"{label}: income tax moved apart from the credit")
+    results[f"{label}_largest_tax_unit_gap_from_the_credit"] = float(tax_gap.max())
+
+    for run in (reform, baseline):
+        rebuilt = household_totals(run, run[CREDIT])
+        if np.abs(rebuilt - run[HOUSEHOLD_CREDIT]).max() > DOLLAR_TOLERANCE:
+            raise AssertionError(f"{label}: household credit misses its tax units")
+
+    def change(name: str) -> np.ndarray:
+        return reform[name] - baseline[name]
+
+    gap = np.abs(
+        change(NET_INCOME)
+        - (change("household.household_benefits") - change("household.household_tax"))
+    )
+    if gap.max() > DOLLAR_TOLERANCE:
+        raise AssertionError(f"{label}: net income moved apart from tax and benefits")
+    results[f"{label}_largest_household_gap_from_tax_and_benefits"] = float(gap.max())
+    return results
+
+
+def check_agi_cap_run(work: Path) -> dict:
+    """The uncapped run must pay the uncapped credit at every AGI."""
+    fisc = load(work, "fisc", PRIMARY_YEAR)
+    uncapped = load(work, "fisc_no_agi_cap", PRIMARY_YEAR)
+    expected = uncapped_credit(
+        uncapped[BASE],
+        uncapped["tax_unit.joint"].astype(bool),
+        uncapped["tax_unit.adjusted_gross_income"],
+    ) * has_caregiver(uncapped)
+    if np.abs(uncapped[CREDIT] - expected).max() > DOLLAR_TOLERANCE:
+        raise AssertionError("the uncapped run misses the uncapped credit")
+    weight = uncapped["tax_unit.tax_unit_weight"]
+    at_or_below_zero = uncapped["tax_unit.adjusted_gross_income"] <= 0
+    removed = (uncapped[CREDIT] - fisc[CREDIT]) * weight
+    if removed[at_or_below_zero].sum() <= 0:
+        raise AssertionError("the uncapped run paid nothing at zero or negative AGI")
+    return {
+        "credit_the_agi_cap_removes": float(removed.sum()),
+        "credit_the_agi_cap_removes_at_zero_or_negative_agi": float(
+            removed[at_or_below_zero].sum()
+        ),
+    } | check_accounting(uncapped, fisc, "agi_cap")
 
 
 def check_invariants(work: Path, rerun: Path) -> dict:
@@ -218,12 +385,11 @@ def check_invariants(work: Path, rerun: Path) -> dict:
 
     results |= credit_gaps_from_the_bill(fisc, STATUTORY_BONUS_RATE)
     credit_gaps_from_the_bill(no_bonus, 0.0)
+    results |= check_accounting(fisc, no_bonus, "bonus")
 
     weight = fisc["tax_unit.tax_unit_weight"]
     by_credit = float((bonus * weight).sum())
-    by_tax = float(
-        ((no_bonus["tax_unit.income_tax"] - fisc["tax_unit.income_tax"]) * weight).sum()
-    )
+    by_tax = float(((no_bonus[INCOME_TAX] - fisc[INCOME_TAX]) * weight).sum())
     by_net_income = float(
         (
             (fisc[NET_INCOME] - no_bonus[NET_INCOME])
@@ -233,8 +399,20 @@ def check_invariants(work: Path, rerun: Path) -> dict:
     results["bonus_measured_by_the_credit"] = by_credit
     results["bonus_measured_by_income_tax"] = by_tax
     results["bonus_measured_by_net_income"] = by_net_income
-    if abs(by_credit - by_tax) > RELATIVE_TOLERANCE * abs(by_credit):
-        raise AssertionError("the credit and income tax disagree on the bonus")
+    for measure in (by_tax, by_net_income):
+        if abs(by_credit - measure) > RELATIVE_TOLERANCE * abs(by_credit):
+            raise AssertionError("the credit and its effects disagree on the bonus")
+
+    caregiver = has_caregiver(fisc)
+    agi = fisc["tax_unit.adjusted_gross_income"]
+    stepped = stepped_credit(fisc[BASE], joint, agi) * caregiver
+    stepped_no_bonus = stepped_credit(no_bonus[BASE], joint, agi, 0) * caregiver
+    results["credit_on_the_bills_phase_out_steps_less_the_model"] = float(
+        ((stepped - fisc[CREDIT]) * weight).sum()
+    )
+    results["bonus_on_the_bills_phase_out_steps_less_the_model"] = float(
+        ((stepped - stepped_no_bonus - bonus) * weight).sum()
+    )
     return results
 
 
@@ -301,7 +479,9 @@ def check_against_api(work: Path) -> dict:
         "fisc_no_bonus": direct_gini(FISC, NO_BONUS)["baseline"],
         "fisc_no_newborn_add_on": direct_gini(FISC, NO_NEWBORN_ADD_ON)["baseline"],
         "fisc_no_phase_out": direct_gini(FISC, NO_PHASE_OUT)["baseline"],
-        "fisc_no_agi_cap": direct_gini(FISC, NO_AGI_CAP)["baseline"],
+        "fisc_agi_cap_at_zero_only": direct_gini(FISC, AGI_CAP_AT_ZERO_ONLY)[
+            "baseline"
+        ],
     }
     gaps = {
         scenario: abs(household_gini(load(work, scenario, PRIMARY_YEAR)) - reported)
@@ -434,11 +614,25 @@ def distribution(work: Path) -> dict[str, pd.DataFrame]:
     credit = "household.family_income_supplement_credit"
     net = NET_INCOME
 
+    person_weight = weight * people
     rankings = {
         "household_net_income": current["household.household_income_decile"],
         "equivalised_household_net_income": weighted_decile(
             equivalised, weight, people
         ),
+    }
+
+    def concentration(ranking: str, amount: np.ndarray) -> float:
+        """Concentration in the units the ranking uses, as the Gini beside it does."""
+        if ranking == "household_net_income":
+            return concentration_coefficient(amount, income, weight)
+        return concentration_coefficient(
+            amount / np.sqrt(people), equivalised, person_weight
+        )
+
+    income_ginis = {
+        "household_net_income": weighted_gini(income, weight),
+        "equivalised_household_net_income": weighted_gini(equivalised, person_weight),
     }
     components = {
         "marriage_bonus": fisc[credit] - no_bonus[credit],
@@ -455,28 +649,23 @@ def distribution(work: Path) -> dict[str, pd.DataFrame]:
     tables = []
     summary = []
     for ranking, groups in rankings.items():
-        rank_income = income if ranking == "household_net_income" else equivalised
-        gini = concentration_coefficient(income, rank_income, weight, people)
         for component, amount in components.items():
-            table = decile_table(groups, amount, income, weight)
+            table = decile_table(groups, amount, income, weight, people)
             table.insert(0, "component", component)
             table.insert(0, "ranking", ranking)
             tables.append(table)
             total = float((amount * weight).sum())
             if abs(table.dollars.sum() - total) > DOLLAR_TOLERANCE * 1e3:
                 raise AssertionError(f"{component}: decile rows miss the aggregate")
-            summary.append(
-                {
-                    "ranking": ranking,
-                    "component": component,
-                    "dollars": total,
-                    **group_shares(table),
-                    "concentration": concentration_coefficient(
-                        amount, rank_income, weight, people
-                    ),
-                    "income_concentration": gini,
-                }
-            )
+            row = {
+                "dollars": total,
+                **group_shares(table),
+                "concentration": concentration(ranking, amount),
+                "income_gini": income_ginis[ranking],
+            }
+            if not np.isfinite(list(row.values())).all():
+                raise AssertionError(f"{component}: a summary value is not finite")
+            summary.append({"ranking": ranking, "component": component, **row})
     return {
         "deciles_by_component": pd.concat(tables, ignore_index=True),
         "component_summary": pd.DataFrame(summary),
@@ -620,11 +809,19 @@ def data_comparison(ecps: Path, work: Path) -> pd.DataFrame:
     return pd.DataFrame(columns).rename_axis("line").reset_index()
 
 
-def main(work: Path, rerun: Path, march: Path, ecps: Path) -> None:
+def main(work: Path, rerun: Path, march: Path, ecps: Path, poverty: Path) -> None:
     budget_by_year().to_csv(RESULTS / "budget_by_year.csv")
     poverty_effects().to_csv(RESULTS / "poverty_2026.csv", index=False)
-    provision_comparison().to_csv(RESULTS / "provisions_2026.csv", index=False)
-    invariants = check_invariants(work, rerun) | check_against_api(work)
+    provisions = pd.concat(
+        [provision_comparison(), pd.DataFrame([agi_cap_provision(work, poverty)])],
+        ignore_index=True,
+    )
+    provisions.to_csv(RESULTS / "provisions_2026.csv", index=False)
+    invariants = (
+        check_invariants(work, rerun)
+        | check_agi_cap_run(work)
+        | check_against_api(work)
+    )
     for name, table in distribution(work).items():
         table.to_csv(RESULTS / f"{name}_2026.csv", index=False)
     gini_by_provision(work).to_csv(RESULTS / "gini_by_provision_2026.csv", index=False)
@@ -650,5 +847,6 @@ if __name__ == "__main__":
     parser.add_argument("--rerun", type=Path, required=True)
     parser.add_argument("--march", type=Path, required=True)
     parser.add_argument("--ecps", type=Path, required=True)
+    parser.add_argument("--poverty", type=Path, required=True)
     args = parser.parse_args()
-    main(args.work, args.rerun, args.march, args.ecps)
+    main(args.work, args.rerun, args.march, args.ecps, args.poverty)

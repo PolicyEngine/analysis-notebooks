@@ -26,6 +26,8 @@ from analysis import (
     concentration_coefficient,
     decile_table,
     group_shares,
+    stepped_credit,
+    uncapped_credit,
     weighted_decile,
     weighted_gini,
 )
@@ -79,6 +81,38 @@ class TestClosedFormBonus:
         assert float(closed_form_credit(base, True, low + step)) <= float(
             closed_form_credit(base, True, low)
         )
+
+
+class TestSteppedCredit:
+    def test_the_bill_steps_once_per_whole_thousand(self):
+        base = np.array([8_000.0])
+        just_below = stepped_credit(base, True, 250_999.0, bonus_rate=0)
+        at_the_step = stepped_credit(base, True, 251_000.0, bonus_rate=0)
+        assert just_below == pytest.approx(8_000)
+        assert at_the_step == pytest.approx(8_000 - 12 * 16.67)
+
+    @given(
+        base=floats(0, 40_000),
+        joint=st.booleans(),
+        agi=floats(-100_000, 1_000_000),
+    )
+    def test_steps_stay_within_a_step_of_the_smooth_model(self, base, joint, agi):
+        gap = float(stepped_credit(base, joint, agi)) - float(
+            closed_form_credit(base, joint, agi)
+        )
+        tolerance = 200.04 + 0.04 * max(agi, 0) / 1_000
+        assert abs(gap) <= tolerance
+
+    @given(base=floats(0, 40_000), joint=st.booleans(), agi=floats(0, 1_000_000))
+    def test_the_cap_applies_to_the_stepped_credit(self, base, joint, agi):
+        assert float(stepped_credit(base, joint, agi)) <= agi + 1e-9
+
+
+class TestUncappedCredit:
+    @given(base=floats(1, 40_000), joint=st.booleans(), agi=floats(-100_000, 0))
+    def test_zero_or_negative_agi_keeps_the_payment(self, base, joint, agi):
+        assert float(uncapped_credit(base, joint, agi)) >= base
+        assert float(closed_form_credit(base, joint, agi)) == 0
 
 
 class TestBonusLostToLimits:
@@ -152,37 +186,49 @@ class TestDecileTable:
 class TestConcentrationCoefficient:
     @settings(deadline=None)
     @given(households())
-    def test_equal_amount_per_person_gives_zero(self, hh):
-        amount = hh["people"] * 100.0
-        coefficient = concentration_coefficient(
-            amount, hh["income"], hh["weight"], hh["people"]
-        )
+    def test_equal_amount_per_unit_gives_zero(self, hh):
+        amount = np.full(len(hh["income"]), 100.0)
+        coefficient = concentration_coefficient(amount, hh["income"], hh["weight"])
         assert coefficient == pytest.approx(0, abs=1e-9)
 
     @given(households(), floats(0.1, 1_000))
     def test_scaling_the_amount_changes_nothing(self, hh, scale):
         amount = hh["amount"] + 1
-        args = (hh["income"], hh["weight"], hh["people"])
+        args = (hh["income"], hh["weight"])
         assert concentration_coefficient(scale * amount, *args) == pytest.approx(
             concentration_coefficient(amount, *args), rel=1e-9
         )
+
+    @settings(deadline=None)
+    @given(households(), st.randoms(use_true_random=False))
+    def test_the_order_of_the_rows_changes_nothing(self, hh, generator):
+        order = list(range(len(hh["income"])))
+        generator.shuffle(order)
+        amount = hh["amount"] + 1
+        assert concentration_coefficient(
+            amount[order], hh["income"][order], hh["weight"][order]
+        ) == pytest.approx(
+            concentration_coefficient(amount, hh["income"], hh["weight"]), abs=1e-9
+        )
+
+    def test_units_tied_on_income_share_a_rank(self):
+        coefficient = concentration_coefficient(
+            np.array([0.0, 100.0]), np.ones(2), np.ones(2)
+        )
+        assert coefficient == pytest.approx(0)
 
     def test_amounts_at_the_top_score_near_one(self):
         n = 1_000
         amount = np.zeros(n)
         amount[-1] = 1
-        coefficient = concentration_coefficient(
-            amount, np.arange(n), np.ones(n), np.ones(n)
-        )
+        coefficient = concentration_coefficient(amount, np.arange(n), np.ones(n))
         assert coefficient == pytest.approx(1, abs=0.002)
 
     def test_amounts_at_the_bottom_score_near_minus_one(self):
         n = 1_000
         amount = np.zeros(n)
         amount[0] = 1
-        coefficient = concentration_coefficient(
-            amount, np.arange(n), np.ones(n), np.ones(n)
-        )
+        coefficient = concentration_coefficient(amount, np.arange(n), np.ones(n))
         assert coefficient == pytest.approx(-1, abs=0.002)
 
 
@@ -213,6 +259,9 @@ class TestScenarios:
         for name, policy in SCENARIOS.items():
             if name.startswith("fisc"):
                 assert FISC_POLICY.items() <= policy.items()
+
+    def test_the_full_no_cap_run_starts_from_the_reform(self):
+        assert SCENARIOS["fisc_no_agi_cap"] == FISC_POLICY
 
     def test_baseline_applies_nothing(self):
         assert SCENARIOS["baseline"] == {}
@@ -247,12 +296,17 @@ def household_income_tax(reform, *, joint, child_age, income):
 
 
 class TestModelAgainstBill:
-    """Differential check: the model's bonus against the bill's closed form."""
+    """Differential check: the model's bonus against its annual reading of the bill.
+
+    The off-grid incomes sit between the bill's $1,000 steps, where the model's
+    smooth phase-out and the closed form still agree.
+    """
 
     @pytest.mark.parametrize("joint", [True, False])
     @pytest.mark.parametrize("child_age", [0, 3, 10])
     @pytest.mark.parametrize(
-        "income", [1_000, 5_000, 60_000, 255_000, 262_000, 310_000, 700_000]
+        "income",
+        [1_000, 5_000, 60_000, 255_000, 255_500, 262_000, 262_750, 310_000, 700_000],
     )
     def test_bonus_matches_the_closed_form(self, joint, child_age, income):
         base = {0: 8_000, 3: 4_800, 10: 3_000}[child_age]

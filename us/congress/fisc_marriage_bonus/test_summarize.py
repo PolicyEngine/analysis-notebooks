@@ -14,6 +14,8 @@ from analysis import closed_form_credit
 from summarize import (
     BASE,
     CREDIT,
+    HOUSEHOLD_CREDIT,
+    INCOME_TAX,
     NET_INCOME,
     PRIMARY_YEAR,
     bonus_gap_from_api,
@@ -26,7 +28,6 @@ from summarize import (
 )
 
 N = 60
-HOUSEHOLD_CREDIT = "household.family_income_supplement_credit"
 FAKE_BASE_AMOUNTS = (0.0, 3_000.0, 4_800.0, 8_000.0)
 FAKE_INCOMES = (20_000.0, 60_000.0, 140_000.0, 270_000.0, 400_000.0)
 
@@ -52,6 +53,8 @@ def fake_run(rate: float, *, ctc: float = 0.0) -> dict[str, np.ndarray]:
         "household.household_id": index,
         "household.household_weight": np.full(N, 1_000.0),
         "household.household_count_people": 2 + index % 3,
+        "household.household_tax": 0.1 * agi - credit - ctc,
+        "household.household_benefits": np.zeros(N),
         NET_INCOME: 0.9 * agi + credit + ctc,
         "household.equiv_household_net_income": (0.9 * agi + credit + ctc)
         / np.sqrt(2 + index % 3),
@@ -145,11 +148,40 @@ class TestInvariants:
             unit = np.flatnonzero(~run["tax_unit.joint"] & (run[BASE] > 0))[0]
             run["tax_unit.age_head"][unit] = 17
             run[CREDIT][unit] = 0
+            run[HOUSEHOLD_CREDIT][unit] = 0
             save(work, scenario, run)
             if scenario == "fisc_no_bonus":
                 save(rerun, scenario, run)
         results = check_invariants(work, rerun)
         assert results["tax_units_with_a_child_and_no_adult_caregiver"] == 1_000
+
+    def test_offsetting_tax_errors_fail(self, runs):
+        work, rerun = runs
+        fisc = fake_run(0.2)
+        fisc[INCOME_TAX][0] += 10_000
+        fisc[INCOME_TAX][1] -= 10_000
+        save(work, "fisc", fisc)
+        save(work, "fisc_restored_bonus", fisc)
+        with pytest.raises(AssertionError, match="income tax moved apart"):
+            check_invariants(work, rerun)
+
+    def test_a_net_income_gain_with_no_tax_or_benefit_behind_it_fails(self, runs):
+        work, rerun = runs
+        fisc = fake_run(0.2)
+        fisc[NET_INCOME] = fisc[NET_INCOME] + 50_000
+        save(work, "fisc", fisc)
+        save(work, "fisc_restored_bonus", fisc)
+        with pytest.raises(AssertionError, match="net income moved apart"):
+            check_invariants(work, rerun)
+
+    def test_a_household_bonus_missing_its_tax_units_fails(self, runs):
+        work, rerun = runs
+        fisc = fake_run(0.2)
+        fisc[HOUSEHOLD_CREDIT] = fake_run(0.0)[HOUSEHOLD_CREDIT]
+        save(work, "fisc", fisc)
+        save(work, "fisc_restored_bonus", fisc)
+        with pytest.raises(AssertionError, match="misses its tax units"):
+            check_invariants(work, rerun)
 
 
 class TestBonusGapFromApi:

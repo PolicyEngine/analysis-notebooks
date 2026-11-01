@@ -24,7 +24,7 @@ import h5py
 import numpy as np
 from policyengine.tax_benefit_models.us import managed_microsimulation
 
-from analysis import SCENARIOS
+from analysis import SCENARIOS, uncapped_credit
 
 HOUSEHOLD_VARIABLES = (
     "household_id",
@@ -52,6 +52,8 @@ REFORM_ONLY_VARIABLES = (
     "family_income_supplement_credit_base_amount",
 )
 CURRENT_LAW_ONLY_VARIABLES = ("refundable_ctc", "non_refundable_ctc")
+POVERTY_VARIABLES = ("person_in_poverty", "age", "person_weight")
+CAREGIVER_AGE = 18
 
 
 def without_saved_spm_outputs(dataset: str, out: Path) -> str:
@@ -71,7 +73,38 @@ def without_saved_spm_outputs(dataset: str, out: Path) -> str:
     return str(copy)
 
 
-def run(scenario: str, year: int, out: Path, dataset: str | None = None) -> Path:
+def remove_the_agi_cap(sim, year: int) -> None:
+    """Hand the model the credit with no cap at any AGI, and let it compute the rest.
+
+    The reform floors the cap at zero, so no parameter lifts it at zero or
+    negative AGI. Income tax and net income then follow from this credit.
+    """
+
+    def calculate(variable: str) -> np.ndarray:
+        return np.asarray(
+            sim.calculate(variable, period=year, map_to="tax_unit").values
+        )
+
+    caregiver = np.maximum(calculate("age_head"), calculate("age_spouse"))
+    credit = uncapped_credit(
+        calculate("family_income_supplement_credit_base_amount"),
+        calculate("filing_status") == "JOINT",
+        calculate("adjusted_gross_income"),
+    )
+    sim.set_input(
+        "family_income_supplement_credit",
+        year,
+        credit * (caregiver >= CAREGIVER_AGE),
+    )
+
+
+def run(
+    scenario: str,
+    year: int,
+    out: Path,
+    dataset: str | None = None,
+    poverty: bool = False,
+) -> Path:
     policy = SCENARIOS[scenario]
     source = (
         {"dataset": without_saved_spm_outputs(dataset, out), "allow_unmanaged": True}
@@ -79,6 +112,8 @@ def run(scenario: str, year: int, out: Path, dataset: str | None = None) -> Path
         else {}
     )
     sim = managed_microsimulation(reform=policy or None, **source)
+    if scenario == "fisc_no_agi_cap":
+        remove_the_agi_cap(sim, year)
 
     def calculate(variable: str, map_to: str | None = None) -> np.ndarray:
         return np.asarray(sim.calculate(variable, period=year, map_to=map_to).values)
@@ -98,6 +133,11 @@ def run(scenario: str, year: int, out: Path, dataset: str | None = None) -> Path
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"{scenario}_{year}.npz"
     np.savez_compressed(path, **arrays)
+    if poverty:
+        np.savez_compressed(
+            out / f"{scenario}_{year}_poverty.npz",
+            **{name: calculate(name) for name in POVERTY_VARIABLES},
+        )
     bundle = dict(getattr(sim, "policyengine_bundle", {}))
     (out / f"{scenario}_{year}.json").write_text(
         json.dumps(
@@ -118,5 +158,10 @@ if __name__ == "__main__":
         "--dataset",
         help="Path to a dataset outside the bundle, for the reconciliation only.",
     )
+    parser.add_argument(
+        "--poverty",
+        action="store_true",
+        help="Also save person poverty arrays, for scenarios the API cannot run.",
+    )
     args = parser.parse_args()
-    print(run(args.scenario, args.year, args.out, args.dataset))
+    print(run(args.scenario, args.year, args.out, args.dataset, args.poverty))

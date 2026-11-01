@@ -150,6 +150,16 @@ def test_any_reachable_target_is_met_with_positive_factors(raw, total, married):
     assert (factors > 0).all()
 
 
+def test_balancing_finishes_when_the_dual_stops_moving_within_rounding():
+    """A minimized counterexample: the line search used to stall near the end."""
+    weights = np.array([4.0, 4.0, 2.375, 1.21875, 1.5, 2.5])
+    married = np.array([1.0, 0.0, 1.0, 0.0, 1.0, 0.0])
+    moments = np.vstack([np.ones(6), married])
+    targets = (moments @ weights) * np.array([1.046875, 1.046875 * 1.109375])
+    factors = entropy_balance(weights, moments, targets)
+    assert np.allclose(moments @ (weights * factors), targets, rtol=1e-8)
+
+
 @settings(max_examples=30, deadline=None)
 @given(st.lists(st.floats(0.5, 5.0), min_size=6, max_size=30), st.floats(0.8, 1.25))
 def test_factors_stay_equal_across_records_the_targets_cannot_tell_apart(raw, total):

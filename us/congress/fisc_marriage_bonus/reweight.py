@@ -151,18 +151,25 @@ def entropy_balance(
     def dual(point: np.ndarray) -> float:
         return float(weights @ factors_at(point) - point @ scaled_targets)
 
+    def gap_at(point: np.ndarray) -> np.ndarray:
+        return scaled_moments @ (factors_at(point) * weights) - scaled_targets
+
     for _ in range(MAX_NEWTON_STEPS):
-        factors = factors_at(multipliers)
-        current = factors * weights
-        gap = scaled_moments @ current - scaled_targets
-        if np.max(np.abs(gap)) < TARGET_TOLERANCE:
-            return factors
+        gap = gap_at(multipliers)
+        worst = np.max(np.abs(gap))
+        if worst < TARGET_TOLERANCE:
+            return factors_at(multipliers)
+        current = factors_at(multipliers) * weights
         hessian = (scaled_moments * current) @ scaled_moments.T
         direction = np.linalg.solve(hessian + 1e-12 * np.eye(hessian.shape[0]), -gap)
-        step = 1.0
         value = dual(multipliers)
-        while dual(multipliers + step * direction) > value + 1e-4 * step * (
-            gap @ direction
+        slope = gap @ direction
+        step = 1.0
+        # Near the solution the dual stops changing within rounding, so a step
+        # also counts as progress when it shrinks the worst miss.
+        while (
+            dual(multipliers + step * direction) > value + 1e-4 * step * slope
+            and np.max(np.abs(gap_at(multipliers + step * direction))) >= worst
         ):
             step /= 2
             if step < 1e-10:

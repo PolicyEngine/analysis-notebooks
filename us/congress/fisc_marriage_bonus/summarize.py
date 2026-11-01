@@ -1,10 +1,11 @@
 """Turn the local runs and API results into the tables in results/.
 
     uv run python us/congress/fisc_marriage_bonus/summarize.py \
-        --work <work-dir> --rerun <rerun-dir> --march <march-dir> --ecps <ecps-dir>
+        --work <work-dir> --rerun <rerun-dir> --march <march-dir> \
+        --ecps <ecps-dir> --cps <cps-dir> --poverty <poverty-dir>
 
-A failed invariant raises before results/invariants.json lands, so that file
-exists only when the runs passed every check.
+The script removes results/invariants.json first and writes every table only
+after every check passes, so that file exists only for a run that passed.
 """
 
 from __future__ import annotations
@@ -43,6 +44,9 @@ FISC_CTC_REPEAL_ONLY = 99025
 CURRENT_LAW = 2
 REEVES_ESTIMATE = 30e9
 DOLLAR_TOLERANCE = 1.0
+# State income tax moves with the federal credit, by up to 8.75 percent of the
+# change in a household's credit on these runs.
+STATE_TAX_SHARE_OF_CREDIT = 0.1
 RELATIVE_TOLERANCE = 1e-3
 GINI_TOLERANCE = 1e-5
 POVERTY_TOLERANCE = 1e-6
@@ -63,6 +67,15 @@ INCOME_TAX = "tax_unit.income_tax"
 NET_INCOME = "household.household_net_income"
 CHILD_AGE = 18
 SENIOR_AGE = 65
+# Census Bureau, America's Families and Living Arrangements: 2023, in thousands.
+# Table C3: https://www2.census.gov/programs-surveys/demo/tables/families/2023/cps-2023/tabc3-all.xls
+# Table FG3, opposite-sex couples: https://www2.census.gov/programs-surveys/demo/tables/families/2023/cps-2023/tabfg3-all.xls
+CENSUS_2023 = {
+    "children_under_18": 72_296,
+    "children_with_married_parents": 48_228,
+    "married_couple_family_groups": 63_869,
+    "married_couple_family_groups_with_own_children": 24_040,
+}
 
 
 def api_result(policy: int, baseline: int, year: int) -> dict:
@@ -200,6 +213,31 @@ def poverty_rates(arrays) -> dict[str, float]:
     }
 
 
+def check_poverty_run(
+    with_cap: dict[str, np.ndarray],
+    without_cap: dict[str, np.ndarray],
+    people_with: dict[str, np.ndarray],
+    people_without: dict[str, np.ndarray],
+) -> None:
+    """Removing the cap can only lift people out, in households it pays."""
+    for name in ("age", "person_weight"):
+        if not np.array_equal(people_with[name], people_without[name]):
+            raise AssertionError("the poverty files hold different people")
+    poor_with = people_with["person_in_poverty"].astype(bool)
+    poor_without = people_without["person_in_poverty"].astype(bool)
+    if (poor_without & ~poor_with).any():
+        raise AssertionError("removing the cap moved someone into poverty")
+    lifted = poor_with & ~poor_without
+    if not lifted.any():
+        raise AssertionError("removing the cap lifted no one out of poverty")
+    gain = pd.Series(
+        without_cap[NET_INCOME] - with_cap[NET_INCOME],
+        index=with_cap["household.household_id"],
+    )
+    if (gain.reindex(with_cap["person.person_household_id"][lifted]) <= 0).any():
+        raise AssertionError("someone left poverty in a household with no gain")
+
+
 def agi_cap_provision(work: Path, poverty: Path) -> dict:
     """The AGI cap's row, from local runs, since no API policy removes all of it.
 
@@ -209,10 +247,11 @@ def agi_cap_provision(work: Path, poverty: Path) -> dict:
     fisc = load(work, "fisc", PRIMARY_YEAR)
     uncapped = load(work, "fisc_no_agi_cap", PRIMARY_YEAR)
     weight = fisc["household.household_weight"]
-    rates_with = poverty_rates(np.load(poverty / f"fisc_{PRIMARY_YEAR}_poverty.npz"))
-    rates_without = poverty_rates(
-        np.load(work / f"fisc_no_agi_cap_{PRIMARY_YEAR}_poverty.npz")
-    )
+    people_with = np.load(poverty / f"fisc_{PRIMARY_YEAR}_poverty.npz")
+    people_without = np.load(work / f"fisc_no_agi_cap_{PRIMARY_YEAR}_poverty.npz")
+    check_poverty_run(fisc, uncapped, people_with, people_without)
+    rates_with = poverty_rates(people_with)
+    rates_without = poverty_rates(people_without)
     api = api_result(FISC, CURRENT_LAW, PRIMARY_YEAR)["poverty"]["poverty"]
     for group, tolerance in (
         ("child", POVERTY_TOLERANCE),
@@ -222,6 +261,10 @@ def agi_cap_provision(work: Path, poverty: Path) -> dict:
     ):
         if abs(rates_with[group] - api[group]["reform"]) > tolerance:
             raise AssertionError("local and API poverty disagree")
+    partial = api_result(FISC, AGI_CAP_AT_ZERO_ONLY, PRIMARY_YEAR)["poverty"]["poverty"]
+    for group in ("all", "child"):
+        if rates_without[group] > partial[group]["baseline"]:
+            raise AssertionError("removing all of the cap beat removing part of it")
 
     def net_cost_part(run: dict[str, np.ndarray]) -> np.ndarray:
         return run["household.household_tax"] - run["household.household_benefits"]
@@ -327,6 +370,15 @@ def check_accounting(reform: dict, baseline: dict, label: str) -> dict:
     if gap.max() > DOLLAR_TOLERANCE:
         raise AssertionError(f"{label}: net income moved apart from tax and benefits")
     results[f"{label}_largest_household_gap_from_tax_and_benefits"] = float(gap.max())
+
+    credit_by_household = household_totals(reform, reform[CREDIT]) - household_totals(
+        baseline, baseline[CREDIT]
+    )
+    state_tax = np.abs(change(NET_INCOME) - credit_by_household)
+    limit = STATE_TAX_SHARE_OF_CREDIT * np.abs(credit_by_household) + DOLLAR_TOLERANCE
+    if (state_tax > limit).any():
+        raise AssertionError(f"{label}: net income moved apart from the credit")
+    results[f"{label}_largest_household_gap_from_the_credit"] = float(state_tax.max())
     return results
 
 
@@ -502,10 +554,19 @@ def household_gini(run: dict[str, np.ndarray]) -> float:
     return weighted_gini(run[NET_INCOME], run["household.household_weight"])
 
 
+def equivalised_income(run: dict[str, np.ndarray]) -> np.ndarray:
+    """The saved equivalised income, checked against its definition."""
+    income = run["household.equiv_household_net_income"]
+    expected = run[NET_INCOME] / np.sqrt(run["household.household_count_people"])
+    if np.abs(income - expected).max() > DOLLAR_TOLERANCE:
+        raise AssertionError("equivalised income misses net income and household size")
+    return income
+
+
 def equivalised_gini(run: dict[str, np.ndarray]) -> float:
     """Equivalised household net income across people, with negatives at zero."""
     return weighted_gini(
-        np.maximum(run["household.equiv_household_net_income"], 0),
+        np.maximum(equivalised_income(run), 0),
         run["household.household_weight"] * run["household.household_count_people"],
     )
 
@@ -610,7 +671,7 @@ def distribution(work: Path) -> dict[str, pd.DataFrame]:
     weight = current["household.household_weight"]
     people = current["household.household_count_people"]
     income = current["household.household_net_income"]
-    equivalised = current["household.equiv_household_net_income"]
+    equivalised = equivalised_income(current)
     credit = "household.family_income_supplement_credit"
     net = NET_INCOME
 
@@ -784,10 +845,32 @@ def reconciliation(
     return table, ladder, orders
 
 
-def data_comparison(ecps: Path, work: Path) -> pd.DataFrame:
-    """The same model and reform on each data file, for the bonus and its base."""
+def children_in_joint_units(
+    run: dict[str, np.ndarray], people: dict[str, np.ndarray]
+) -> dict:
+    """Children under 18, and the share of them in joint tax units."""
+    joint = pd.Series(
+        run["tax_unit.joint"].astype(bool), index=run["tax_unit.tax_unit_id"]
+    )
+    weight = people["person_weight"].astype(float)
+    child = people["age"] < CHILD_AGE
+    in_joint_unit = joint.reindex(run["person.person_tax_unit_id"]).to_numpy()
+    return {
+        "children_under_18": float(weight[child].sum()),
+        "share_of_children_in_joint_tax_units": float(
+            weight[child & in_joint_unit].sum() / weight[child].sum()
+        ),
+    }
+
+
+def data_comparison(ecps: Path, cps: Path, work: Path, poverty: Path) -> pd.DataFrame:
+    """The same model and reform on each data file, against the Census Bureau."""
     columns = {}
-    for label, folder in (("march_2025_data", ecps), ("todays_data", work)):
+    for label, folder, people in (
+        ("march_2025_data", ecps, ecps),
+        ("cps_2024_data", cps, cps),
+        ("todays_data", work, poverty),
+    ):
         fisc = load(folder, "fisc", PRIMARY_YEAR)
         no_bonus = load(folder, "fisc_no_bonus", PRIMARY_YEAR)
         weight = no_bonus["tax_unit.tax_unit_weight"]
@@ -805,40 +888,59 @@ def data_comparison(ecps: Path, work: Path) -> pd.DataFrame:
             "statutory_bonus": STATUTORY_BONUS_RATE * joint_base,
             "bonus": float(((fisc[CREDIT] - no_bonus[CREDIT]) * weight).sum()),
             "credit": float((fisc[CREDIT] * weight).sum()),
+            **children_in_joint_units(
+                fisc, np.load(people / f"fisc_{PRIMARY_YEAR}_poverty.npz")
+            ),
         }
+    columns["census_2023"] = {
+        "joint_tax_units": 1e3 * CENSUS_2023["married_couple_family_groups"],
+        "joint_tax_units_with_a_child": 1e3
+        * CENSUS_2023["married_couple_family_groups_with_own_children"],
+        "children_under_18": 1e3 * CENSUS_2023["children_under_18"],
+        "share_of_children_in_joint_tax_units": CENSUS_2023[
+            "children_with_married_parents"
+        ]
+        / CENSUS_2023["children_under_18"],
+    }
     return pd.DataFrame(columns).rename_axis("line").reset_index()
 
 
-def main(work: Path, rerun: Path, march: Path, ecps: Path, poverty: Path) -> None:
-    budget_by_year().to_csv(RESULTS / "budget_by_year.csv")
-    poverty_effects().to_csv(RESULTS / "poverty_2026.csv", index=False)
-    provisions = pd.concat(
-        [provision_comparison(), pd.DataFrame([agi_cap_provision(work, poverty)])],
-        ignore_index=True,
-    )
-    provisions.to_csv(RESULTS / "provisions_2026.csv", index=False)
+def main(
+    work: Path, rerun: Path, march: Path, ecps: Path, cps: Path, poverty: Path
+) -> None:
+    marker = RESULTS / "invariants.json"
+    marker.unlink(missing_ok=True)
     invariants = (
         check_invariants(work, rerun)
         | check_agi_cap_run(work)
         | check_against_api(work)
     )
-    for name, table in distribution(work).items():
-        table.to_csv(RESULTS / f"{name}_2026.csv", index=False)
-    gini_by_provision(work).to_csv(RESULTS / "gini_by_provision_2026.csv", index=False)
-    bonus_reach(work).to_csv(RESULTS / "bonus_reach_2026.csv", index=False)
-    versus_reeves(work).to_csv(RESULTS / "versus_reeves_estimate.csv", index=False)
     years, ladder, orders = reconciliation(march, ecps, work)
-    years.to_csv(RESULTS / "march_2025_comparison.csv")
-    ladder.to_csv(RESULTS / "march_2025_ladder.csv", index=False)
-    orders.to_csv(RESULTS / "march_2025_step_orders.csv", index=False)
-    data_comparison(ecps, work).to_csv(
-        RESULTS / "data_comparison_2026.csv", index=False
+    provisions = pd.concat(
+        [provision_comparison(), pd.DataFrame([agi_cap_provision(work, poverty)])],
+        ignore_index=True,
     )
-    (RESULTS / "invariants.json").write_text(json.dumps(invariants, indent=1))
+    indexed = {"budget_by_year": budget_by_year(), "march_2025_comparison": years}
+    plain = {
+        "poverty_2026": poverty_effects(),
+        "provisions_2026": provisions,
+        **{f"{name}_2026": table for name, table in distribution(work).items()},
+        "gini_by_provision_2026": gini_by_provision(work),
+        "bonus_reach_2026": bonus_reach(work),
+        "versus_reeves_estimate": versus_reeves(work),
+        "march_2025_ladder": ladder,
+        "march_2025_step_orders": orders,
+        "data_comparison_2026": data_comparison(ecps, cps, work, poverty),
+    }
+    for name, table in indexed.items():
+        table.to_csv(RESULTS / f"{name}.csv")
+    for name, table in plain.items():
+        table.to_csv(RESULTS / f"{name}.csv", index=False)
     provenance = json.loads((work / f"fisc_{PRIMARY_YEAR}.json").read_text())["bundle"]
     (RESULTS / "provenance.json").write_text(
         json.dumps(provenance, indent=1, sort_keys=True)
     )
+    marker.write_text(json.dumps(invariants, indent=1))
 
 
 if __name__ == "__main__":
@@ -847,6 +949,7 @@ if __name__ == "__main__":
     parser.add_argument("--rerun", type=Path, required=True)
     parser.add_argument("--march", type=Path, required=True)
     parser.add_argument("--ecps", type=Path, required=True)
+    parser.add_argument("--cps", type=Path, required=True)
     parser.add_argument("--poverty", type=Path, required=True)
     args = parser.parse_args()
-    main(args.work, args.rerun, args.march, args.ecps, args.poverty)
+    main(args.work, args.rerun, args.march, args.ecps, args.cps, args.poverty)

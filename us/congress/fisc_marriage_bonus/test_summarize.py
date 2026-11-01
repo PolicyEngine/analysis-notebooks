@@ -21,9 +21,12 @@ from summarize import (
     bonus_gap_from_api,
     bonus_reach,
     check_invariants,
+    check_poverty_run,
     data_comparison,
     distribution,
+    equivalised_gini,
     gini_by_provision,
+    main,
     versus_reeves,
 )
 
@@ -67,6 +70,16 @@ def fake_run(rate: float, *, ctc: float = 0.0) -> dict[str, np.ndarray]:
 
 def save(folder, scenario, arrays):
     np.savez(folder / f"{scenario}_{PRIMARY_YEAR}.npz", **arrays)
+
+
+def fake_people(in_poverty=None):
+    return {
+        "person_in_poverty": np.zeros(N, dtype=bool)
+        if in_poverty is None
+        else in_poverty,
+        "age": np.where(np.arange(N) % 2 == 0, 10.0, 40.0),
+        "person_weight": np.full(N, 3_000.0, dtype=np.float32),
+    }
 
 
 @pytest.fixture
@@ -174,6 +187,19 @@ class TestInvariants:
         with pytest.raises(AssertionError, match="net income moved apart"):
             check_invariants(work, rerun)
 
+    def test_a_household_shift_hidden_behind_household_tax_fails(self, runs):
+        work, rerun = runs
+        fisc = fake_run(0.2)
+        fisc[NET_INCOME][0] += 100_000
+        fisc["household.household_tax"][0] -= 100_000
+        fisc["household.equiv_household_net_income"] = fisc[NET_INCOME] / np.sqrt(
+            fisc["household.household_count_people"]
+        )
+        save(work, "fisc", fisc)
+        save(work, "fisc_restored_bonus", fisc)
+        with pytest.raises(AssertionError, match="apart from the credit"):
+            check_invariants(work, rerun)
+
     def test_a_household_bonus_missing_its_tax_units_fails(self, runs):
         work, rerun = runs
         fisc = fake_run(0.2)
@@ -182,6 +208,66 @@ class TestInvariants:
         save(work, "fisc_restored_bonus", fisc)
         with pytest.raises(AssertionError, match="misses its tax units"):
             check_invariants(work, rerun)
+
+
+class TestEquivalisedIncome:
+    def test_an_income_off_its_definition_fails(self):
+        run = fake_run(0.2)
+        run["household.equiv_household_net_income"] = np.full(N, 100_000.0)
+        with pytest.raises(AssertionError, match="equivalised income"):
+            equivalised_gini(run)
+
+
+class TestPovertyRun:
+    @staticmethod
+    def runs():
+        with_cap, without_cap = fake_run(0.2), fake_run(0.2)
+        without_cap[NET_INCOME][0] += 500
+        poor = np.zeros(N, dtype=bool)
+        poor[0] = True
+        return with_cap, without_cap, fake_people(poor), fake_people()
+
+    def test_a_lift_in_a_household_that_gains_passes(self):
+        check_poverty_run(*self.runs())
+
+    def test_the_same_file_twice_fails(self):
+        with_cap, without_cap, people, _ = self.runs()
+        with pytest.raises(AssertionError, match="lifted no one"):
+            check_poverty_run(with_cap, without_cap, people, people)
+
+    def test_someone_moved_into_poverty_fails(self):
+        with_cap, without_cap, people, _ = self.runs()
+        worse = fake_people(np.array([True, True] + [False] * (N - 2)))
+        with pytest.raises(AssertionError, match="into poverty"):
+            check_poverty_run(with_cap, without_cap, people, worse)
+
+    def test_a_lift_with_no_gain_fails(self):
+        with_cap, _, people, people_without = self.runs()
+        with pytest.raises(AssertionError, match="no gain"):
+            check_poverty_run(with_cap, with_cap, people, people_without)
+
+    def test_different_people_fail(self):
+        with_cap, without_cap, people, people_without = self.runs()
+        people_without["age"] = people_without["age"] + 1
+        with pytest.raises(AssertionError, match="different people"):
+            check_poverty_run(with_cap, without_cap, people, people_without)
+
+
+class TestMain:
+    def test_a_failed_check_removes_the_marker_and_writes_nothing(
+        self, runs, tmp_path, monkeypatch
+    ):
+        work, rerun = runs
+        results = tmp_path / "results"
+        results.mkdir()
+        (results / "invariants.json").write_text("{}")
+        monkeypatch.setattr(summarize, "RESULTS", results)
+        broken = fake_run(0.2)
+        broken[CREDIT][1] += 1
+        save(work, "fisc_restored_bonus", broken)
+        with pytest.raises(AssertionError, match="restoring"):
+            main(work, rerun, work, work, work, work)
+        assert list(results.iterdir()) == []
 
 
 class TestBonusGapFromApi:
@@ -266,12 +352,24 @@ class TestGiniByProvision:
 
 
 class TestDataComparison:
-    def test_each_file_reports_the_bonus_within_its_statutory_bound(self, runs):
+    @pytest.fixture
+    def table(self, runs):
         work, _ = runs
-        table = data_comparison(work, work).set_index("line")
-        for column in ("march_2025_data", "todays_data"):
+        np.savez(work / f"fisc_{PRIMARY_YEAR}_poverty.npz", **fake_people())
+        return data_comparison(work, work, work, work).set_index("line")
+
+    def test_each_file_reports_the_bonus_within_its_statutory_bound(self, table):
+        for column in ("march_2025_data", "cps_2024_data", "todays_data"):
             assert table[column]["bonus"] <= table[column]["statutory_bonus"] + 1
             assert 0 < table[column]["joint_share_of_base_amount"] < 1
+
+    def test_the_child_share_counts_children_in_joint_units(self, table):
+        share = table["todays_data"]["share_of_children_in_joint_tax_units"]
+        assert share == pytest.approx(1.0)
+
+    def test_the_census_column_holds_the_published_share(self, table):
+        share = table["census_2023"]["share_of_children_in_joint_tax_units"]
+        assert share == pytest.approx(48_228 / 72_296)
 
 
 class TestVersusReeves:

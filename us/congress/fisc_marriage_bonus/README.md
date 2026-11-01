@@ -68,9 +68,9 @@ No. Reeves suspected the bonus was "the most regressive piece of the design", an
 - It cuts poverty from 11.68 percent to 11.31 percent and child poverty from 12.36 percent to 11.45 percent.
 - As a percent of income it rises from 0.32 percent in decile 1 to 0.52 percent in decile 3, then falls to 0.01 percent in decile 10.
 - Its concentration coefficient is -0.018 on household income and -0.179 on equivalised income. Both fall far below the 0.42 and 0.46 Ginis of those incomes, which marks a progressive transfer. The dollars run about flat per person across household income.
-- The rest of the credit scores -0.160 and -0.297, so it reaches the bottom harder. The bottom five deciles receive 61.3 percent of the rest of the credit and 50.1 percent of the bonus.
+- The rest of the credit scores -0.160 and -0.297 and the newborn add-on -0.118 and -0.219, so both reach the bottom harder on either ranking. The bottom five deciles receive 61.3 percent of the rest of the credit, 62.2 percent of the add-on and 50.1 percent of the bonus.
 
-The two pieces that raise inequality are the repeal of the child tax credit and the AGI cap. The cap raises it most per dollar and falls hardest on decile 1.
+The Gini change per dollar in the table below compares the bonus and the add-on less cleanly: on equivalised income the bonus lowers the Gini by 0.000044 per billion and the add-on by 0.000043. The two pieces that raise inequality are the repeal of the child tax credit and the AGI cap. The cap raises it most per dollar and falls hardest on decile 1.
 
 | Provision | Net cost | Gini without it | Gini with it | Gini change per $B | Child poverty without it | Child poverty with it |
 |---|---|---|---|---|---|---|

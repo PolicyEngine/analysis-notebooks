@@ -136,6 +136,8 @@ The same model and reform ran on three files. Each ranks households within its o
 | Bottom five deciles' share of the bonus | 36.2% | 39.4% | 50.1% | |
 | Top three deciles' share of the bonus | 38.0% | 30.4% | 22.9% | |
 | Bottom five deciles' share of the rest of the credit | 48.4% | 50.8% | 61.3% | |
+| Bottom five deciles' share of the bonus, equivalised income | 51.9% | 55.1% | 61.9% | |
+| Bottom five deciles' share of the rest of the credit, equivalised income | 61.0% | 64.7% | 71.0% | |
 | Gini without the bonus | 0.53462 | 0.44640 | 0.47012 | |
 | Gini with the bonus | 0.53425 | 0.44611 | 0.46942 | |
 | Bonus concentration, household income | +0.262 | +0.257 | +0.066 | |
@@ -165,7 +167,7 @@ Today's model refuses the March 2025 file as it stands, because the file saves a
 
 **Deciles.** `household_income_decile` ranks households on household net income with no size adjustment, and each decile holds about a tenth of people. These tables rank every component on current-law income so that the rows compare. Percent of income divides by current-law household net income. Households with negative net income take their own row, which receives $9 of the bonus.
 
-**Gini.** The API's Gini matches household net income across households, with no equivalisation and with negative incomes left in, to within 0.00001 in all six scenarios that `summarize.py` compares. The second measure takes equivalised household net income across people, with negative incomes at zero.
+**Gini.** The API's Gini matches household net income across households, with no equivalisation and with negative incomes left in, to within 0.00001 in all seven scenarios that `summarize.py` compares. The second measure takes equivalised household net income across people, with negative incomes at zero.
 
 **Concentration.** Each coefficient keeps one unit throughout, and tied incomes share a midrank. On household income it ranks households on household net income, weights them by household weight and counts household dollars. On equivalised income it ranks people on equivalised household net income, weights them by people and divides each household's dollars by the square root of its size. The 0.475 and 0.457 benchmarks use those same units with negative incomes left in, so the second differs from the equivalised Gini above, 0.453 at current law, which sets them to zero.
 
@@ -180,7 +182,7 @@ Today's model refuses the March 2025 file as it stands, because the file saves a
 | Three data files | Local runs of today's bundle on each file |
 | March 2025 comparison | Local rerun of the March 2025 stack, and local runs of today's bundle on the March 2025 data |
 
-The local runs and the API use the same bundle. Local and API reform differences match to the dollar in every scenario compared: both put the bonus at $34.285367915B of income tax in 2026 and $32.064156757B in 2035, and the newborn, phase-out and above-zero AGI cap variants match at $8.8704B, -$37.5928B and -$4.3196B. Local income tax levels sit a constant $0.33 billion below the API's in all three core scenarios, and local net income sits $0.51 billion above it. Household counts, weights and child tax credit totals match exactly, so those do not explain the gap, and we have not traced its cause. It moves decile means by at most $1.72, in deciles 7 to 10. Local and API poverty rates for children and working-age adults match to 15 digits. The local rate for people 65 and over runs 0.0086 points above the API's, cause also untraced, which lifts the all-ages rate by 0.0015 points.
+The local runs and the API use the same bundle. Local and API reform differences match to the dollar in every scenario compared: both put the bonus at $34.285367915B of income tax in 2026 and $32.064156757B in 2035, and the newborn, phase-out and above-zero AGI cap variants match at $8.8704B, -$37.5928B and -$4.3196B. Local income tax levels sit a constant $0.33 billion below the API's in all three core scenarios, and local net income sits $0.51 billion above it. Household counts, weights and child tax credit totals match exactly, so those do not explain the gap, and we have not traced its cause. It moves decile means by at most $1.72 on the bonus and full FISC, in deciles 7 to 10, and by $2.81 and $2.12 on the child tax credit repeal, in deciles 9 and 10, where the two largely offset. Local and API poverty rates for children and working-age adults match to 15 digits. The local rate for people 65 and over runs 0.0086 points above the API's, cause also untraced, which lifts the all-ages rate by 0.0015 points.
 
 ## Versions
 
@@ -205,14 +207,14 @@ The local runs and the API use the same bundle. Local and API reform differences
 - Each household's credit equals the sum of its tax units' credits, rebuilt through person links.
 - The bonus measured by income tax and by net income each sit within 0.1 percent of the bonus measured by the credit.
 - The `fisc_no_agi_cap` credit equals the uncapped formula at every AGI, and that run pays credit at zero and negative AGI.
-- Local and API results agree on the bonus in 2026 and 2035, the decile means, the Gini, and the poverty rates, within the tolerances `summarize.py` states.
+- Local and API results agree on the bonus in 2026 and 2035, the decile means and totals, the Gini in seven scenarios, and the poverty rates, within the tolerances `summarize.py` states.
 - Every saved array holds finite numbers, and saved equivalised income equals net income over the square root of household size.
 - Every table cell holds text or a finite number. Blanks fall only in the cells each table leaves empty, and `invariants.json` refuses a NaN before any table reaches disk.
 - The runs that saved the detail arrays match the runs in the work folder, array for array.
 - Each household's net income moves by its rebuilt credit less its rebuilt state income tax, to within a dollar. State income tax moves only for tax units whose credit moves, and its total matches the API's.
 - With the AGI cap and without it, each person's poverty flag matches their SPM unit's income and threshold, the thresholds match, and each SPM unit's income moves by its members' federal and state income tax changes, with each tax unit counted in its head's SPM unit as the model counts it. Nobody enters poverty when the cap goes, someone leaves it, and the rates fall at or below the API's partial removal.
 - Between 2026 and 2035 every record keeps its identifiers, person links, ages, joint status, base amount and household size, and every weight grows by one factor.
-- On the March 2025 and CPS files, every tax unit's credit equals the closed form, no unmarried tax unit receives the bonus, and each household's credit equals the sum of its tax units' credits. Income tax and net income move with the credit as they do on the current dataset, apart from the state income tax check, and the household credit and net income each put the bonus within 0.1 percent of the credit. The net income check widens past a dollar where single precision cannot resolve one: 14 households in the March 2025 file, with $70 million to $148 million of net income and a combined weight of 0.05, sit up to $24 from it.
+- On the March 2025 and CPS files, every tax unit's credit equals the closed form, no unmarried tax unit receives the bonus, and each household's credit equals the sum of its tax units' credits. Every tax unit's income tax moves with its credit, every household's net income moves by its change in benefits less its change in tax, and the household credit and net income each put the bonus within 0.1 percent of the credit. These files carry no state income tax arrays, so no check ties one household's net income to its credit there. The household check allows a dollar plus two single-precision steps of the household's income, which adds $0.13 at $1 million. On the March 2025 file, 14 households with $34 million to $174 million of net income and a combined weight of 0.05 sit more than a dollar from the identity, by at most $24 or 1.5 steps.
 - On each of the three data files, the bonus lowers the Gini, concentrates below income and reaches the bottom less than the rest of the credit, on both rankings.
 - No unmarried tax unit receives the bonus in 2035.
 - The March 2025 rerun reproduces the published CSV in 2026 and 2035.
@@ -232,7 +234,7 @@ The local runs and the API use the same bundle. Local and API reform differences
 - The bill creates a payment from the Social Security Administration and says nothing about means-tested benefits. The model treats the payment as a refundable income tax credit and moves no benefit, so these runs do not show whether the payment would change benefits.
 - We have not put a dollar figure on any of these substitutions.
 - The model pays $8,000 for a child under 1: $4,800 for twelve months at $400, and $3,200 for four months at $800 as a stand-in for pregnancy. The bill pays $800 a month once a pregnancy has lasted at least 20 weeks and starts the child's payment after the month of birth. The model has no separate count of pregnancies.
-- The bill takes effect at least a year after enactment. These runs apply it to all of 2026.
+- The bill takes effect at least a year after enactment, prorates the child tax credit in the first taxable year of payments and repeals it for later years. These runs apply the payment and the repeal to all of 2026.
 - The current dataset calibrates a pool of CPS ASEC records to 2024 targets, and the model uprates incomes and scales weights to reach later years. From 2026 to 2035 every record keeps its ages, family structure, filing status and base amount, and every weight grows by 3.35 percent, so the decade holds no cohort aging and no change in family structure.
 - The bonus and its distribution depend on how many parents file jointly, and the three data files put that share of base amounts at 54, 69 and 72 percent. The 2026 estimate moves by $9 billion across them, and the bottom five deciles' share by 14 percentage points. The spread measures sensitivity to the file and sets no uncertainty range.
 - The ten-year figures and the poverty rates come from the current dataset alone.

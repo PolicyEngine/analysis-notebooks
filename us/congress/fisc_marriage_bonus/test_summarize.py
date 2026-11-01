@@ -34,6 +34,7 @@ from summarize import (
     distribution,
     equivalised_gini,
     gini_by_provision,
+    household_totals,
     income_tolerance,
     load,
     main,
@@ -358,6 +359,19 @@ class TestPovertyRun:
         with pytest.raises(AssertionError, match="SPM income moved apart"):
             check_poverty_run(with_cap, without_cap, detail, detail_without)
 
+    def test_a_person_with_no_tax_unit_fails(self):
+        run = {
+            "tax_unit.tax_unit_id": np.array([7]),
+            "person.person_tax_unit_id": np.array([7, 9]),
+        }
+        detail = {
+            "is_tax_unit_head": np.array([True, True]),
+            "person_spm_unit_id": np.array([1, 1]),
+            "spm_unit_id": np.array([1]),
+        }
+        with pytest.raises(AssertionError, match="no tax unit"):
+            spm_unit_totals(run, detail, np.array([100.0]))
+
     def test_a_tax_unit_counts_in_its_heads_spm_unit(self):
         run = {
             "tax_unit.tax_unit_id": np.array([7, 8]),
@@ -554,6 +568,23 @@ class TestIncomeTolerance:
     def test_a_dollar_holds_at_ordinary_incomes(self):
         run = fake_run(0.2)
         assert income_tolerance(run).max() < 1.1
+
+
+class TestRecords:
+    def test_changed_person_links_fail(self, runs):
+        work, _ = runs
+        fisc = fake_run(0.2)
+        fisc["person.person_household_id"] = fisc["person.person_household_id"][::-1]
+        save(work, "fisc", fisc)
+        with pytest.raises(AssertionError, match="person_household_id"):
+            check_comparison_file(work, "file")
+
+    def test_a_tax_unit_with_no_person_fails(self):
+        run = fake_run(0.2)
+        run["person.person_tax_unit_id"] = np.zeros(N, dtype=int)
+        run["person.person_household_id"] = np.zeros(N, dtype=int)
+        with pytest.raises(AssertionError, match="no person link"):
+            household_totals(run, run[CREDIT])
 
 
 class TestDetailRuns:
@@ -786,6 +817,8 @@ class TestDataComparison:
             "rest_of_credit_concentration_equivalised": -0.2,
             "bonus_share_of_bottom_five_deciles": 0.4,
             "rest_of_credit_share_of_bottom_five_deciles": 0.5,
+            "bonus_share_of_bottom_five_deciles_equivalised": 0.55,
+            "rest_of_credit_share_of_bottom_five_deciles_equivalised": 0.65,
         }
         rows = {"line": list(lines), "cps_2024_data": list(lines.values())}
         rows["todays_data"] = rows["march_2025_data"] = rows["cps_2024_data"]
@@ -804,6 +837,7 @@ class TestDataComparison:
             {"bonus_concentration": 0.5},
             {"bonus_concentration": -0.1},
             {"bonus_share_of_bottom_five_deciles": 0.6},
+            {"bonus_share_of_bottom_five_deciles_equivalised": 0.7},
             {"bonus_concentration_equivalised": 0.9},
             {"bonus_concentration_equivalised": -0.3},
             {"bonus_concentration": np.nan},

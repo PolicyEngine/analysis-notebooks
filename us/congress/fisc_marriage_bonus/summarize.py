@@ -53,11 +53,14 @@ POVERTY_TOLERANCE = 1e-6
 SENIOR_POVERTY_TOLERANCE = 1e-4
 # Reform differences match the API to the dollar, but the local and API income
 # levels differ by a constant, so a few households change decile near the top.
-DECILE_MEAN_TOLERANCE = 2.0
+# The largest gap runs $2.81 in decile 9 on the child tax credit repeal, and
+# decile 10 offsets it, so each comparison's total must also match.
+DECILE_MEAN_TOLERANCE = 3.0
 # The weights save in single precision, so their ratio carries that much noise.
 WEIGHT_GROWTH_TOLERANCE = 1e-5
 # The model adds incomes in single precision, where neighbouring values sit $16
-# apart at $148 million, and its sums round at each step.
+# apart at $148 million, and its sums round at each step. On the March 2025 file
+# the largest gap from the net income identity spans 1.5 steps.
 SINGLE_PRECISION_STEPS = 2
 SAMPLING_DRAWS = 200
 SAMPLING_SEED = 0
@@ -204,6 +207,7 @@ def provision_comparison() -> pd.DataFrame:
         rows.append(
             {
                 "provision": provision,
+                "path": "production API",
                 "net_cost": cost,
                 "gini_without": gini["baseline"],
                 "gini_with": gini["reform"],
@@ -262,6 +266,8 @@ def spm_unit_totals(
         .reindex(run["person.person_tax_unit_id"])
         .to_numpy()
     )
+    if np.isnan(by_person).any():
+        raise AssertionError("a person links to no tax unit")
     totals = (
         pd.Series(
             by_person * detail["is_tax_unit_head"], index=detail["person_spm_unit_id"]
@@ -358,6 +364,7 @@ def agi_cap_provision(work: Path, detail: Path) -> tuple[dict, dict]:
     ).set_index("group")
     row = {
         "provision": "agi_cap",
+        "path": "local run",
         "net_cost": cost,
         "gini_without": gini_without,
         "gini_with": gini_with,
@@ -408,30 +415,42 @@ def household_totals(run: dict[str, np.ndarray], amount: np.ndarray) -> np.ndarr
     ).drop_duplicates()
     if links.tax_unit.duplicated().any():
         raise AssertionError("a tax unit spans two households")
-    household = links.set_index("tax_unit").household
-    totals = (
-        pd.Series(
-            amount, index=household.reindex(run["tax_unit.tax_unit_id"]).to_numpy()
-        )
-        .groupby(level=0)
-        .sum()
+    household = links.set_index("tax_unit").household.reindex(
+        run["tax_unit.tax_unit_id"]
     )
+    if household.isna().any():
+        raise AssertionError("a tax unit has no person link")
+    totals = pd.Series(amount, index=household.to_numpy()).groupby(level=0).sum()
     return totals.reindex(run["household.household_id"], fill_value=0.0).to_numpy()
 
 
 def income_tolerance(run: dict[str, np.ndarray]) -> np.ndarray:
-    """A dollar, widened only where single precision cannot resolve one."""
+    """A dollar plus two single-precision steps of the household's income.
+
+    The steps add $0.13 at $1 million and $32 at $148 million.
+    """
     income = np.abs(run[NET_INCOME]).astype(np.float32)
     return DOLLAR_TOLERANCE + SINGLE_PRECISION_STEPS * np.spacing(income)
+
+
+def check_same_records(run: dict, other: dict, label: str) -> None:
+    """Two runs must hold the same records, links and weights."""
+    for name in (
+        "tax_unit.tax_unit_id",
+        "tax_unit.tax_unit_weight",
+        "household.household_id",
+        "household.household_weight",
+        "person.person_household_id",
+        "person.person_tax_unit_id",
+    ):
+        if not np.array_equal(run[name], other[name]):
+            raise AssertionError(f"{label}: {name} differs between runs")
 
 
 def check_two_runs(reform: dict, baseline: dict, label: str) -> dict:
     """Check two runs against each other for every tax unit and household."""
     results: dict[str, object] = {}
-    for entity in ("tax_unit", "household"):
-        for name in (f"{entity}.{entity}_id", f"{entity}.{entity}_weight"):
-            if not np.array_equal(reform[name], baseline[name]):
-                raise AssertionError(f"{label}: {name} differs between runs")
+    check_same_records(reform, baseline, label)
 
     credit = reform[CREDIT] - baseline[CREDIT]
     tax_gap = np.abs((baseline[INCOME_TAX] - reform[INCOME_TAX]) - credit)
@@ -502,9 +521,7 @@ def check_comparison_file(folder: Path, label: str) -> dict:
     current = load(folder, "baseline", PRIMARY_YEAR)
     fisc = load(folder, "fisc", PRIMARY_YEAR)
     no_bonus = load(folder, "fisc_no_bonus", PRIMARY_YEAR)
-    for name in ("household.household_id", "household.household_weight"):
-        if not np.array_equal(current[name], fisc[name]):
-            raise AssertionError(f"{label}: {name} differs between runs")
+    check_same_records(current, fisc, label)
     credit_gaps_from_the_bill(fisc, STATUTORY_BONUS_RATE)
     credit_gaps_from_the_bill(no_bonus, 0.0)
     results = check_two_runs(fisc, no_bonus, label)
@@ -693,6 +710,7 @@ def check_against_api(work: Path) -> dict:
     current = load(work, "baseline", PRIMARY_YEAR)
     fisc = load(work, "fisc", PRIMARY_YEAR)
     no_bonus = load(work, "fisc_no_bonus", PRIMARY_YEAR)
+    repeal = load(work, "fisc_ctc_repeal_only", PRIMARY_YEAR)
     results: dict[str, object] = {}
 
     direct = api_result(FISC, NO_BONUS, PRIMARY_YEAR)
@@ -705,6 +723,11 @@ def check_against_api(work: Path) -> dict:
             fisc,
             current,
             api_result(FISC, CURRENT_LAW, PRIMARY_YEAR),
+        ),
+        "ctc_repeal_over_current_law": (
+            repeal,
+            current,
+            api_result(FISC_CTC_REPEAL_ONLY, CURRENT_LAW, PRIMARY_YEAR),
         ),
     }
     for label, (reform, baseline, api) in comparisons.items():
@@ -723,11 +746,18 @@ def check_against_api(work: Path) -> dict:
         results[f"{label}_largest_decile_mean_gap_dollars"] = float(max(gaps))
         if max(gaps) > DECILE_MEAN_TOLERANCE:
             raise AssertionError(f"{label}: local and API decile means disagree")
+        total = float(table.dollars.sum())
+        api_total = -float(api["budget"]["budgetary_impact"])
+        if abs(total - api_total) > RELATIVE_TOLERANCE * abs(api_total):
+            raise AssertionError(f"{label}: local and API totals disagree")
 
     api_gini = {
         "baseline": direct_gini(FISC, CURRENT_LAW)["baseline"],
         "fisc": direct_gini(FISC, CURRENT_LAW)["reform"],
         "fisc_no_bonus": direct_gini(FISC, NO_BONUS)["baseline"],
+        "fisc_ctc_repeal_only": direct_gini(FISC_CTC_REPEAL_ONLY, CURRENT_LAW)[
+            "reform"
+        ],
         "fisc_no_newborn_add_on": direct_gini(FISC, NO_NEWBORN_ADD_ON)["baseline"],
         "fisc_no_phase_out": direct_gini(FISC, NO_PHASE_OUT)["baseline"],
         "fisc_agi_cap_at_zero_only": direct_gini(FISC, AGI_CAP_AT_ZERO_ONLY)[
@@ -993,8 +1023,14 @@ def reconciliation(
         )
     table = pd.DataFrame(rows).set_index("year")
     gap = (table.march_2025_stack - table.published_csv).abs().max()
-    if gap > DOLLAR_TOLERANCE * 1e3:
+    if gap > DOLLAR_TOLERANCE:
         raise AssertionError("the March 2025 rerun misses the published CSV")
+    for folder in (ecps, work):
+        check_same_records(
+            load(folder, "baseline_march_2025_ctc", PRIMARY_YEAR),
+            load(folder, "fisc", PRIMARY_YEAR),
+            "the March 2025 child tax credit baseline",
+        )
 
     def tax(folder: Path, scenario: str) -> float:
         return weighted_sum(load(folder, scenario, PRIMARY_YEAR), "tax_unit.income_tax")
@@ -1111,15 +1147,25 @@ def distribution_lines(folder: Path) -> dict:
         "gini_with_the_bonus": household_gini(fisc),
         "equivalised_income_gini": weighted_gini(adjusted, person_weight),
     }
+    adjusted_decile = weighted_decile(adjusted, weight, people)
     for name, amount in pieces.items():
         shares = group_shares(
             decile_table(
                 current["household.household_income_decile"], amount, income, weight
             )
         )
+        adjusted_shares = group_shares(
+            decile_table(adjusted_decile, amount, income, weight)
+        )
         lines |= {
             f"{name}_share_of_bottom_five_deciles": shares["bottom_five_deciles"],
             f"{name}_share_of_top_three_deciles": shares["top_three_deciles"],
+            f"{name}_share_of_bottom_five_deciles_equivalised": adjusted_shares[
+                "bottom_five_deciles"
+            ],
+            f"{name}_share_of_top_three_deciles_equivalised": adjusted_shares[
+                "top_three_deciles"
+            ],
             f"{name}_concentration": concentration_coefficient(amount, income, weight),
             f"{name}_concentration_equivalised": concentration_coefficient(
                 amount / np.sqrt(people), adjusted, person_weight
@@ -1131,8 +1177,8 @@ def distribution_lines(folder: Path) -> dict:
 def rescaled_draws(counts: np.ndarray, people: np.ndarray, total: float) -> np.ndarray:
     """Weights for one set of draws, as policyengine-core 3.26.1's subsample sets them.
 
-    That version built the CPS file. It scales draw counts until household weight,
-    added over person rows, reaches the original total.
+    The CPS file's release manifest names that version. It scales draw counts until
+    household weight, added over person rows, reaches the original total.
     """
     return counts * total / float((counts * people).sum())
 
@@ -1248,11 +1294,11 @@ def check_the_answer_on_every_file(table: pd.DataFrame) -> dict:
                 raise AssertionError(f"{label}: the bonus concentrates above income")
             if bonus <= column[f"rest_of_credit_concentration{suffix}"]:
                 raise AssertionError(f"{label}: the bonus reaches lower than the rest")
-        if (
-            column["bonus_share_of_bottom_five_deciles"]
-            >= column["rest_of_credit_share_of_bottom_five_deciles"]
-        ):
-            raise AssertionError(f"{label}: the bonus reaches lower than the rest")
+            if (
+                column[f"bonus_share_of_bottom_five_deciles{suffix}"]
+                >= column[f"rest_of_credit_share_of_bottom_five_deciles{suffix}"]
+            ):
+                raise AssertionError(f"{label}: the bonus reaches lower than the rest")
         results[f"{label}_gini_change_with_the_bonus"] = float(
             column["gini_with_the_bonus"] - column["gini_without_the_bonus"]
         )

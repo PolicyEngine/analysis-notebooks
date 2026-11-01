@@ -4,7 +4,7 @@ Richard Reeves asked PolicyEngine to rerun FISC reform 76612 with the 20 percent
 
 ## Result
 
-The bonus costs $34.3 billion in 2026 and $334.5 billion over 2026-2035.
+The bonus costs $34.3 billion in 2026 and $334.5 billion over 2026-2035, the sum of ten calendar years in nominal dollars with no discounting.
 
 | Year | Full FISC | FISC with the bonus at zero | Bonus |
 |---|---|---|---|
@@ -13,7 +13,7 @@ The bonus costs $34.3 billion in 2026 and $334.5 billion over 2026-2035.
 | 2028 | -$136.27B | -$102.07B | -$34.20B |
 | 2029 | -$128.23B | -$94.26B | -$33.97B |
 | 2030 | -$125.77B | -$92.10B | -$33.67B |
-| 2031 | -$118.67B | -$85.17B | -$33.50B |
+| 2031 | -$118.67B | -$85.16B | -$33.50B |
 | 2032 | -$115.23B | -$82.00B | -$33.23B |
 | 2033 | -$107.71B | -$74.89B | -$32.82B |
 | 2034 | -$104.18B | -$71.69B | -$32.49B |
@@ -22,7 +22,7 @@ The bonus costs $34.3 billion in 2026 and $334.5 billion over 2026-2035.
 
 Each column shows the change in government revenue against current law, which equals the budget impact because the model moves no benefit spending when the credit changes. The bonus column subtracts the second column from the first. A direct comparison of policy 76612 over policy 99021 agrees: -$334.4522769B over ten years.
 
-The figure depends on the data. On the file behind the March 2025 analysis, the same model and reform put the 2026 bonus at $25.3 billion, because joint filers hold 54 percent of base amounts there and 72 percent in the current dataset. [Against the March 2025 estimate](#against-the-march-2025-estimate) sets out both files.
+The figure depends on the data file. The same model and reform put the 2026 bonus at $25.3 billion on the file behind the March 2025 analysis, $29.6 billion on the CPS with Census weights and $34.3 billion on the current dataset, because joint filers hold 54, 69 and 72 percent of base amounts in those files. The Census Bureau counted 66.7 percent of children living with married parents in 2023. [Three data files](#three-data-files) sets out the comparison.
 
 ### Who receives it, 2026
 
@@ -43,6 +43,8 @@ These rows rank households on current-law household net income, the app's standa
 
 The bonus reaches 24.0 million tax units and 23.9 million of 124.6 million households, and a receiving tax unit gets $1,429 on average.
 
+These rows move with the data file. The bottom five deciles receive 50.1 percent of the bonus in the current dataset, 39.4 percent in the CPS and 36.2 percent in the March 2025 file, and the top three receive 22.9, 30.4 and 38.0 percent. `results/deciles_by_data_file_2026.csv` holds the decile rows for all three files.
+
 Ranking on income adjusted for household size moves larger families down the distribution, so the bonus looks more concentrated at the bottom. On that ranking the bottom five deciles receive 61.9 percent of it and the top three 14.0 percent, against 50.1 percent and 22.9 percent above. `results/deciles_by_component_2026.csv` holds both rankings.
 
 Two things shape these rows. Joint filers make up 38 percent of tax units with a child in decile 1 and 91 percent in decile 10. And the limits bite at each end. At 20 percent of joint filers' base amounts, the bonus would cost $40.9 billion. The phase-out removes $5.2 billion of that, nearly all of it in deciles 9 and 10, and the AGI cap removes $1.4 billion, mostly in decile 1.
@@ -53,7 +55,7 @@ Two things shape these rows. Joint filers make up 38 percent of tax units with a
 | 2 | 42% | $3.37B | $0.00B | $0.17B | $3.20B |
 | 3 | 59% | $4.22B | $0.00B | $0.20B | $4.02B |
 | 4 | 70% | $4.54B | $0.00B | $0.09B | $4.45B |
-| 5 | 70% | $4.08B | $0.00B | $0.03B | $4.05B |
+| 5 | 70% | $4.08B | $0.00B | $0.02B | $4.05B |
 | 6 | 76% | $4.26B | $0.00B | $0.02B | $4.24B |
 | 7 | 84% | $5.04B | $0.00B | $0.01B | $5.03B |
 | 8 | 85% | $4.23B | $0.00B | $0.02B | $4.21B |
@@ -64,7 +66,7 @@ The negative-income group adds $0.06 billion of statutory bonus, all of it lost 
 
 ### Is the bonus regressive?
 
-No. Reeves suspected the bonus was "the most regressive piece of the design", and that suspicion does not hold. A narrower version does: the bonus is the least progressive of the credit's spending pieces.
+No. Reeves suspected the bonus was "the most regressive piece of the design", and that suspicion does not hold on any of the three data files. A narrower version holds on all three: the bonus reaches the bottom of the distribution less than the rest of the credit does. How far it reaches depends on the file. The rows below use the current dataset, and [Three data files](#three-data-files) shows the other two.
 
 - The bonus narrows inequality. It lowers the Gini of household net income from 0.47012 to 0.46941 and the Gini of equivalised income across people from 0.44545 to 0.44393.
 - It cuts poverty from 11.68 percent to 11.31 percent and child poverty from 12.36 percent to 11.45 percent.
@@ -73,7 +75,7 @@ No. Reeves suspected the bonus was "the most regressive piece of the design", an
 - Its dollars peak in the middle of the distribution: $42 per person in decile 1, $129 in decile 4, $146 in decile 7 and $21 in decile 10.
 - The rest of the credit scores -0.075 and -0.288 and the newborn add-on -0.035 and -0.227, so both reach the bottom harder on either ranking. The bottom five deciles receive 61.3 percent of the rest of the credit, 62.2 percent of the add-on and 50.1 percent of the bonus.
 
-The Gini change per dollar in the table below compares the bonus and the add-on less cleanly: the add-on lowers household Gini more per billion, and the bonus lowers equivalised Gini slightly more. The two pieces that raise inequality are the repeal of the child tax credit and the AGI cap. The cap raises it most per dollar and falls hardest on decile 1, which loses $220 per household, or 0.78 percent of income.
+The Gini change per dollar in the table below compares the bonus and the add-on less cleanly: the add-on lowers household Gini more per billion, and the bonus lowers equivalised Gini slightly more. The two pieces that raise inequality are the repeal of the child tax credit and the AGI cap. The cap raises it most per dollar and falls hardest on decile 1, which loses $219 per household, or 0.78 percent of income.
 
 | Provision | Net cost | Gini without it | Gini with it | Gini change per $B | Equivalised Gini change per $B | Child poverty without it | Child poverty with it |
 |---|---|---|---|---|---|---|---|
@@ -91,7 +93,7 @@ The child tax credit that FISC repeals scores +0.084 on household income and -0.
 
 ### Against the $30 billion estimate
 
-Reeves's back-of-envelope figure, "arithmetic on the married share", came to about $30 billion a year. The model's $34.3 billion exceeds it by $4.3 billion, or 14 percent. At 20 percent, $30 billion implies a $150 billion married base. In the model joint filers hold $204.5 billion of base amount, 72 percent of $284.3 billion, before the limits apply, and $170.3 billion of credit once they apply, 70 percent of $244.3 billion. Twenty percent of the first gives the $40.9 billion statutory bonus, and the limits take that to $34.3 billion. On the March 2025 data, joint filers hold $153.1 billion of base amount, which sits close to the implied $150 billion and gives a $30.6 billion statutory bonus. `results/versus_reeves_estimate.csv` and `results/data_comparison_2026.csv` hold these lines. We do not know the inputs behind the $30 billion, so this analysis makes no claim about where the two figures part.
+Reeves's back-of-envelope figure, "arithmetic on the married share", came to about $30 billion a year. The model's $34.3 billion exceeds it by $4.3 billion, or 14 percent. At 20 percent, $30 billion implies a $150 billion married base. In the model joint filers hold $204.5 billion of base amount, 72 percent of $284.3 billion, before the limits apply, and $170.3 billion of credit once they apply, 70 percent of $244.3 billion. Twenty percent of the first gives the $40.9 billion statutory bonus, and the limits take that to $34.3 billion. On the March 2025 data, joint filers hold $153.1 billion of base amount, which sits close to the implied $150 billion and gives a $30.6 billion statutory bonus. The CPS with Census weights gives a $29.6 billion bonus after the limits. `results/versus_reeves_estimate.csv` and `results/data_comparison_2026.csv` hold these lines. We do not know the inputs behind the $30 billion, so this analysis makes no claim about where the figures part.
 
 ### Against the March 2025 estimate
 
@@ -117,17 +119,37 @@ The bonus moves differently, because no change in the child tax credit reaches i
 
 The dataset supplies $8.94 billion of the $9.85 billion rise in 2026. Both files hold about the same base amount, $283.0 billion and $284.3 billion, and they split it differently.
 
-| 2026 | March 2025 data | Today's data |
-|---|---|---|
-| Tax units | 206.0M | 165.4M |
-| Joint tax units | 71.8M | 86.0M |
-| Tax units with a child | 47.7M | 42.5M |
-| Joint tax units with a child | 25.1M | 28.9M |
-| Joint share of base amount | 54.1% | 71.9% |
-| Statutory bonus | $30.6B | $40.9B |
-| Bonus paid | $25.3B | $34.3B |
+### Three data files
 
-As a rough benchmark, the Census Bureau [counted](https://www.census.gov/newsroom/press-releases/2023/children-families-living-arrangements.html) 75 percent of children under 6 and 68 percent of those aged 12 to 17 living with two parents in 2023. That count includes unmarried parents, who cannot file jointly, and it counts children where these rows count base amounts.
+The same model and reform ran on three files. Each ranks households within its own file.
+
+| 2026 | March 2025 data | CPS with Census weights | Current dataset | Census Bureau, 2023 |
+|---|---|---|---|---|
+| Children under 18 | 76.0M | 69.6M | 77.9M | 72.3M |
+| Share of children in joint tax units | 53.9% | 68.6% | 71.6% | 66.7% with married parents |
+| Joint tax units | 71.8M | 70.2M | 86.0M | 63.9M married couples |
+| Joint tax units with a child | 25.1M | 25.6M | 28.9M | 24.0M married couples with own children |
+| Base amount | $283.0B | $255.9B | $284.3B | |
+| Joint share of base amount | 54.1% | 68.9% | 71.9% | |
+| Statutory bonus | $30.6B | $35.3B | $40.9B | |
+| Bonus paid | $25.3B | $29.6B | $34.3B | |
+| Bottom five deciles' share of the bonus | 36.2% | 39.4% | 50.1% | |
+| Top three deciles' share of the bonus | 38.0% | 30.4% | 22.9% | |
+| Bottom five deciles' share of the rest of the credit | 48.4% | 50.8% | 61.3% | |
+| Gini without the bonus | 0.53462 | 0.44640 | 0.47012 | |
+| Gini with the bonus | 0.53425 | 0.44611 | 0.46942 | |
+| Bonus concentration, household income | +0.262 | +0.257 | +0.066 | |
+| Rest of the credit, household income | +0.124 | +0.135 | -0.075 | |
+| Bonus concentration, equivalised income | -0.027 | -0.091 | -0.184 | |
+| Rest of the credit, equivalised income | -0.126 | -0.193 | -0.288 | |
+
+The Census column counts opposite-sex married couples and their family groups in [tables C3 and FG3](https://www.census.gov/data/tables/2023/demo/families/cps-2023.html), and the other columns count tax units in 2026, so the columns line up only roughly. A married grandparent who claims a child, for example, counts as a joint tax unit with a child.
+
+Against the Census share, the March 2025 file puts too few children with joint filers and the current dataset too many. The current dataset also holds more children than the Census count, and [PolicyEngine/microcosm#880](https://github.com/PolicyEngine/microcosm/issues/880), [#1070](https://github.com/PolicyEngine/microcosm/issues/1070) and [#1212](https://github.com/PolicyEngine/microcosm/issues/1212) track its counts of married couples and children. The CPS sits closest to the Census share and holds fewer children than the Census count. We report no single corrected figure, because each figure here comes from a full run on a real file.
+
+Across the three files, the bonus narrows the Gini, its concentration falls below the Gini of income, and the rest of the credit reaches the bottom more than it does. The share reaching the bottom half and the concentration on household income move a lot. Bonus dollars peak in decile 7 in the current dataset, decile 8 in the CPS and decile 9 in the March 2025 file.
+
+The CPS file comes from `policyengine_us_data`'s `CPS_2024`, which builds on the Census Bureau's 2024 ASEC with its household weights and keeps half of its sample, 20,657 households. These runs cover 2026 only.
 
 Today's model refuses the March 2025 file as it stands, because the file saves an SPM threshold that the model computes for itself. `run.py` copies the file without that column, and income tax does not read it. The model then ignores 16 more columns. The March 2025 model read `medicare_part_b_premiums` as part of health insurance premiums and several reported benefit amounts, and neither model reads the three retirement distribution columns or `is_widowed`.
 
@@ -155,6 +177,7 @@ Today's model refuses the March 2025 file as it stands, because the file saves a
 | Decile dollars, shares, receipt, percent of income | Local microsimulation |
 | Equivalised Gini, concentration, joint shares, limits | Local microsimulation |
 | AGI cap row of the provision table | Local microsimulation, `fisc_no_agi_cap` |
+| Three data files | Local runs of today's bundle on each file |
 | March 2025 comparison | Local rerun of the March 2025 stack, and local runs of today's bundle on the March 2025 data |
 
 The local runs and the API use the same bundle. Local and API reform differences match to the dollar in every scenario compared: both put the bonus at $34.285367915B of income tax in 2026 and $32.064156757B in 2035, and the newborn, phase-out and above-zero AGI cap variants match at $8.8704B, -$37.5928B and -$4.3196B. Local income tax levels sit a constant $0.33 billion below the API's in all three core scenarios, and local net income sits $0.51 billion above it. Household counts, weights and child tax credit totals match exactly, so those do not explain the gap, and we have not traced its cause. It moves decile means by at most $1.72, in deciles 7 to 10. Local and API poverty rates for children and working-age adults match to 15 digits. The local rate for people 65 and over runs 0.0086 points above the API's, cause also untraced, which lifts the all-ages rate by 0.0015 points.
@@ -165,6 +188,7 @@ The local runs and the API use the same bundle. Local and API reform differences
 - Dataset `hf://policyengine/populace-us/populace_us_2024.h5@populace-us-2024-spm-20260915`, sha256 `6496cc4393d4d3c6574f76eca231de5898c803b9067645591fd5c4d3e65aee84`
 - `results/provenance.json` records the full bundle of the local runs, and each file in `results/api/` records the bundle of its API run
 - The March 2025 stack runs policyengine-us 1.211.0 and policyengine-core 3.16.3 on `enhanced_cps_2024.h5` at Hugging Face revision 0611cbeda3, and `march_2025.py` records how to build it
+- The CPS runs use `cps_2024.h5` from `policyengine/policyengine-us-data` at Hugging Face revision 21280dca59, sha256 `16b8cdbdc2c83d102fedb0f557d6de0a28344df4dacedb7ce95b587deef84fbc`
 
 ## Invariants
 
@@ -182,7 +206,10 @@ The local runs and the API use the same bundle. Local and API reform differences
 - The bonus measured by income tax and by net income each sit within 0.1 percent of the bonus measured by the credit.
 - The `fisc_no_agi_cap` credit equals the uncapped formula at every AGI, and that run pays credit at zero and negative AGI.
 - Local and API results agree on the bonus in 2026 and 2035, the decile means, the Gini, and the poverty rates, within the tolerances `summarize.py` states.
-- Every summary value comes out finite.
+- Every summary value comes out finite, and saved equivalised income equals net income over the square root of household size.
+- Each household's net income moves with its rebuilt credit, apart from a state tax residual under a tenth of the change.
+- The no-cap poverty file holds the same people as the full run, nobody enters poverty when the cap goes, someone leaves it, everyone who leaves lives in a household that gains, and the rates fall at or below the API's partial removal.
+- On each of the three data files, the bonus lowers the Gini, concentrates below income and reaches the bottom less than the rest of the credit.
 - No unmarried tax unit receives the bonus in 2035.
 - The March 2025 rerun reproduces the published CSV in 2026 and 2035.
 
@@ -200,10 +227,11 @@ The local runs and the API use the same bundle. Local and API reform differences
 - The bill's cap combines the AGI of the beneficiary and spouse. The model uses tax unit AGI, including for couples filing separately.
 - The bill creates a payment from the Social Security Administration and says nothing about means-tested benefits. The model treats the payment as a refundable income tax credit and moves no benefit, so these runs do not show whether the payment would change benefits.
 - We have not put a dollar figure on any of these substitutions.
-- The model treats a child under 1 as a $8,000 year, which stands in for the bill's $800 a month in pregnancy. It has no separate count of pregnancies.
+- The model pays $8,000 for a child under 1: $4,800 for twelve months at $400, and $3,200 for four months at $800 as a stand-in for pregnancy. The bill pays $800 a month once a pregnancy has lasted at least 20 weeks and starts the child's payment after the month of birth. The model has no separate count of pregnancies.
 - The bill takes effect at least a year after enactment. These runs apply it to all of 2026.
 - The dataset builds on 2024 data, and the model uprates it to later years.
-- The bonus depends on how many parents file jointly, and the two datasets differ on that by 18 percentage points of base amount. The estimate moves by about $9 billion a year between them.
+- The bonus and its distribution depend on how many parents file jointly, and the three data files put that share of base amounts at 54, 69 and 72 percent. The 2026 estimate moves by $9 billion across them, and the bottom five deciles' share by 14 percentage points.
+- The ten-year figures come from the current dataset alone.
 
 ## Reproduce
 
@@ -227,8 +255,12 @@ uv run us/congress/fisc_marriage_bonus/run.py fisc_no_agi_cap 2026 --out work --
 uv run us/congress/fisc_marriage_bonus/run.py fisc 2026 --out poverty --poverty
 ```
 
-`run.py` takes one scenario and one year and holds about 14 GB of memory for about five minutes. `analysis.SCENARIOS` lists the scenarios, and the runs need 2026 for all of them and 2035 for `baseline`, `fisc` and `fisc_no_bonus`. `fisc_agi_cap_at_zero_only` matches API policy 99024, and `fisc_no_agi_cap` removes the cap at every AGI. A rerun of `fisc_no_bonus` into a second folder supplies the determinism check. `march_2025.py` documents the older environment it needs, and it writes `baseline`, `fisc` and `fisc_no_bonus` for 2026 and 2035 into the March folder. The last rungs run `baseline_march_2025_ctc`, `baseline`, `fisc` and `fisc_no_bonus` for 2026 with `run.py --dataset enhanced_cps_2024.h5 --out ecps`. Then:
+```bash
+uv run us/congress/fisc_marriage_bonus/run.py fisc 2026 --dataset cps_2024.h5 --out cps --people
+```
+
+`run.py` takes one scenario and one year and holds about 14 GB of memory for about five minutes. `analysis.SCENARIOS` lists the scenarios, and the runs need 2026 for all of them and 2035 for `baseline`, `fisc` and `fisc_no_bonus`. `fisc_agi_cap_at_zero_only` matches API policy 99024, and `fisc_no_agi_cap` removes the cap at every AGI. A rerun of `fisc_no_bonus` into a second folder supplies the determinism check. `march_2025.py` documents the older environment it needs, and it writes `baseline`, `fisc` and `fisc_no_bonus` for 2026 and 2035 into the March folder. The last rungs run `baseline_march_2025_ctc`, `baseline`, `fisc` and `fisc_no_bonus` for 2026 with `run.py --dataset enhanced_cps_2024.h5 --out ecps`, and `fisc` there also takes `--people`. The CPS folder needs `baseline`, `fisc --people` and `fisc_no_bonus` for 2026. Today's SPM code refuses both older files, so `--people` saves ages and weights without poverty. Then:
 
 ```bash
-uv run --python 3.13 --with 'policyengine[models]==6.11.1' python us/congress/fisc_marriage_bonus/summarize.py --work work --rerun rerun --march march --ecps ecps --poverty poverty
+uv run --python 3.13 --with 'policyengine[models]==6.11.1' python us/congress/fisc_marriage_bonus/summarize.py --work work --rerun rerun --march march --ecps ecps --cps cps --poverty poverty
 ```

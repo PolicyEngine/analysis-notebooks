@@ -52,7 +52,8 @@ REFORM_ONLY_VARIABLES = (
     "family_income_supplement_credit_base_amount",
 )
 CURRENT_LAW_ONLY_VARIABLES = ("refundable_ctc", "non_refundable_ctc")
-POVERTY_VARIABLES = ("person_in_poverty", "age", "person_weight")
+PEOPLE_VARIABLES = ("age", "person_weight")
+POVERTY_VARIABLES = ("person_in_poverty", *PEOPLE_VARIABLES)
 CAREGIVER_AGE = 18
 
 
@@ -104,6 +105,7 @@ def run(
     out: Path,
     dataset: str | None = None,
     poverty: bool = False,
+    people: bool = False,
 ) -> Path:
     policy = SCENARIOS[scenario]
     source = (
@@ -133,6 +135,11 @@ def run(
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"{scenario}_{year}.npz"
     np.savez_compressed(path, **arrays)
+    if people:
+        np.savez_compressed(
+            out / f"{scenario}_{year}_people.npz",
+            **{name: calculate(name) for name in PEOPLE_VARIABLES},
+        )
     if poverty:
         np.savez_compressed(
             out / f"{scenario}_{year}_poverty.npz",
@@ -163,5 +170,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Also save person poverty arrays, for scenarios the API cannot run.",
     )
+    parser.add_argument(
+        "--people",
+        action="store_true",
+        help="Also save ages and weights, for a dataset this model's SPM code refuses.",
+    )
     args = parser.parse_args()
-    print(run(args.scenario, args.year, args.out, args.dataset, args.poverty))
+    print(
+        run(args.scenario, args.year, args.out, args.dataset, args.poverty, args.people)
+    )

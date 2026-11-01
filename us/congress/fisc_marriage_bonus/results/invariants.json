@@ -7,6 +7,7 @@
  "dollars_the_caregiver_test_removes": 0.0,
  "bonus_largest_tax_unit_gap_from_the_credit": 0.0020751953125,
  "bonus_largest_household_gap_from_tax_and_benefits": 0.03125,
+ "bonus_largest_household_gap_from_the_credit": 210.0,
  "bonus_measured_by_the_credit": 34285367924.35341,
  "bonus_measured_by_income_tax": 34285367914.834984,
  "bonus_measured_by_net_income": 34282380929.75877,
@@ -16,11 +17,15 @@
  "credit_the_agi_cap_removes_at_zero_or_negative_agi": 4431519148.666703,
  "agi_cap_largest_tax_unit_gap_from_the_credit": 0.0029296875,
  "agi_cap_largest_household_gap_from_tax_and_benefits": 0.09375,
+ "agi_cap_largest_household_gap_from_the_credit": 0.07861328125,
  "bonus_local_2026": 34285367914.834984,
  "bonus_api_2026": 34285367914.83496,
  "bonus_local_2035": 32064156756.99288,
  "bonus_api_2035": 32064156756.993164,
  "bonus_over_fisc_no_bonus_largest_decile_mean_gap_dollars": 0.6323900225656871,
  "full_fisc_over_current_law_largest_decile_mean_gap_dollars": 1.7154228989917613,
- "largest_gini_gap": 7.790114294581318e-06
+ "largest_gini_gap": 7.790114294581318e-06,
+ "march_2025_data_gini_change_with_the_bonus": -0.0003706618751800894,
+ "cps_2024_data_gini_change_with_the_bonus": -0.00029599705045363356,
+ "todays_data_gini_change_with_the_bonus": -0.0007068382346433477
 }

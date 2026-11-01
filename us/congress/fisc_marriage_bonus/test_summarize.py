@@ -7,6 +7,7 @@ results/.
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
 import summarize
@@ -22,7 +23,9 @@ from summarize import (
     bonus_reach,
     check_invariants,
     check_poverty_run,
+    check_the_answer_on_every_file,
     data_comparison,
+    deciles_by_data_file,
     distribution,
     equivalised_gini,
     gini_by_provision,
@@ -356,6 +359,7 @@ class TestDataComparison:
     def table(self, runs):
         work, _ = runs
         np.savez(work / f"fisc_{PRIMARY_YEAR}_poverty.npz", **fake_people())
+        np.savez(work / f"fisc_{PRIMARY_YEAR}_people.npz", **fake_people())
         return data_comparison(work, work, work, work).set_index("line")
 
     def test_each_file_reports_the_bonus_within_its_statutory_bound(self, table):
@@ -366,6 +370,46 @@ class TestDataComparison:
     def test_the_child_share_counts_children_in_joint_units(self, table):
         share = table["todays_data"]["share_of_children_in_joint_tax_units"]
         assert share == pytest.approx(1.0)
+
+    @staticmethod
+    def answer(**changes):
+        lines = {
+            "gini_with_the_bonus": 0.46,
+            "gini_without_the_bonus": 0.47,
+            "bonus_concentration": 0.1,
+            "household_income_gini": 0.47,
+            "rest_of_credit_concentration": 0.0,
+            "bonus_share_of_bottom_five_deciles": 0.4,
+            "rest_of_credit_share_of_bottom_five_deciles": 0.5,
+        }
+        rows = {"line": list(lines), "cps_2024_data": list(lines.values())}
+        rows["todays_data"] = rows["march_2025_data"] = rows["cps_2024_data"]
+        table = pd.DataFrame(rows).set_index("line")
+        for name, value in changes.items():
+            table.loc[name, "cps_2024_data"] = value
+        return table.reset_index()
+
+    def test_the_answer_passes_when_it_holds_on_every_file(self):
+        assert check_the_answer_on_every_file(self.answer())
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            {"gini_with_the_bonus": 0.48},
+            {"bonus_concentration": 0.5},
+            {"bonus_concentration": -0.1},
+            {"bonus_share_of_bottom_five_deciles": 0.6},
+        ],
+    )
+    def test_the_answer_fails_when_one_file_breaks_it(self, change):
+        with pytest.raises(AssertionError, match="cps_2024_data"):
+            check_the_answer_on_every_file(self.answer(**change))
+
+    def test_decile_rows_sum_to_the_bonus_on_each_file(self, table, runs):
+        work, _ = runs
+        deciles = deciles_by_data_file(work, work, work)
+        for label, rows in deciles.groupby("data_file"):
+            assert rows.dollars.sum() == pytest.approx(table[label]["bonus"], abs=1)
 
     def test_the_census_column_holds_the_published_share(self, table):
         share = table["census_2023"]["share_of_children_in_joint_tax_units"]

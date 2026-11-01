@@ -863,13 +863,79 @@ def children_in_joint_units(
     }
 
 
+def bonus_by_decile(folder: Path) -> pd.DataFrame:
+    """The bonus by current-law decile on one data file."""
+    current = load(folder, "baseline", PRIMARY_YEAR)
+    fisc = load(folder, "fisc", PRIMARY_YEAR)
+    no_bonus = load(folder, "fisc_no_bonus", PRIMARY_YEAR)
+    return decile_table(
+        current["household.household_income_decile"],
+        fisc[HOUSEHOLD_CREDIT] - no_bonus[HOUSEHOLD_CREDIT],
+        current[NET_INCOME],
+        current["household.household_weight"],
+        current["household.household_count_people"],
+    )
+
+
+def deciles_by_data_file(ecps: Path, cps: Path, work: Path) -> pd.DataFrame:
+    """The bonus by decile on each data file, ranked within that file."""
+    return pd.concat(
+        [
+            bonus_by_decile(folder).assign(data_file=label)
+            for label, folder in (
+                ("march_2025_data", ecps),
+                ("cps_2024_data", cps),
+                ("todays_data", work),
+            )
+        ],
+        ignore_index=True,
+    )
+
+
+def distribution_lines(folder: Path) -> dict:
+    """Shares, concentration and Gini on one data file, ranked within that file."""
+    current = load(folder, "baseline", PRIMARY_YEAR)
+    fisc = load(folder, "fisc", PRIMARY_YEAR)
+    no_bonus = load(folder, "fisc_no_bonus", PRIMARY_YEAR)
+    weight = current["household.household_weight"]
+    people = current["household.household_count_people"]
+    income = current[NET_INCOME]
+    adjusted = income / np.sqrt(people)
+    person_weight = weight * people
+    pieces = {
+        "bonus": fisc[HOUSEHOLD_CREDIT] - no_bonus[HOUSEHOLD_CREDIT],
+        "rest_of_credit": no_bonus[HOUSEHOLD_CREDIT],
+    }
+    lines: dict[str, float] = {
+        "household_income_gini": weighted_gini(income, weight),
+        "gini_without_the_bonus": household_gini(no_bonus),
+        "gini_with_the_bonus": household_gini(fisc),
+        "equivalised_income_gini": weighted_gini(adjusted, person_weight),
+    }
+    for name, amount in pieces.items():
+        shares = group_shares(
+            decile_table(
+                current["household.household_income_decile"], amount, income, weight
+            )
+        )
+        lines |= {
+            f"{name}_share_of_bottom_five_deciles": shares["bottom_five_deciles"],
+            f"{name}_share_of_top_three_deciles": shares["top_three_deciles"],
+            f"{name}_concentration": concentration_coefficient(amount, income, weight),
+            f"{name}_concentration_equivalised": concentration_coefficient(
+                amount / np.sqrt(people), adjusted, person_weight
+            ),
+        }
+    return lines
+
+
 def data_comparison(ecps: Path, cps: Path, work: Path, poverty: Path) -> pd.DataFrame:
     """The same model and reform on each data file, against the Census Bureau."""
     columns = {}
-    for label, folder, people in (
-        ("march_2025_data", ecps, ecps),
-        ("cps_2024_data", cps, cps),
-        ("todays_data", work, poverty),
+    for label, folder, person_file in (
+        ("march_2025_data", ecps, ecps / f"fisc_{PRIMARY_YEAR}_people.npz"),
+        ("cps_2024_data", cps, cps / f"fisc_{PRIMARY_YEAR}_people.npz"),
+        ("todays_data", work, poverty / f"fisc_{PRIMARY_YEAR}_poverty.npz"),
     ):
         fisc = load(folder, "fisc", PRIMARY_YEAR)
         no_bonus = load(folder, "fisc_no_bonus", PRIMARY_YEAR)
@@ -888,9 +954,8 @@ def data_comparison(ecps: Path, cps: Path, work: Path, poverty: Path) -> pd.Data
             "statutory_bonus": STATUTORY_BONUS_RATE * joint_base,
             "bonus": float(((fisc[CREDIT] - no_bonus[CREDIT]) * weight).sum()),
             "credit": float((fisc[CREDIT] * weight).sum()),
-            **children_in_joint_units(
-                fisc, np.load(people / f"fisc_{PRIMARY_YEAR}_poverty.npz")
-            ),
+            **children_in_joint_units(fisc, np.load(person_file)),
+            **distribution_lines(folder),
         }
     columns["census_2023"] = {
         "joint_tax_units": 1e3 * CENSUS_2023["married_couple_family_groups"],
@@ -905,6 +970,29 @@ def data_comparison(ecps: Path, cps: Path, work: Path, poverty: Path) -> pd.Data
     return pd.DataFrame(columns).rename_axis("line").reset_index()
 
 
+def check_the_answer_on_every_file(table: pd.DataFrame) -> dict:
+    """The regressivity answer must hold on each data file, not only the current one."""
+    lines = table.set_index("line")
+    results = {}
+    for label in ("march_2025_data", "cps_2024_data", "todays_data"):
+        column = lines[label]
+        if column["gini_with_the_bonus"] >= column["gini_without_the_bonus"]:
+            raise AssertionError(f"{label}: the bonus does not narrow the Gini")
+        if column["bonus_concentration"] >= column["household_income_gini"]:
+            raise AssertionError(f"{label}: the bonus concentrates above income")
+        if column["bonus_concentration"] <= column["rest_of_credit_concentration"]:
+            raise AssertionError(f"{label}: the bonus reaches lower than the rest")
+        if (
+            column["bonus_share_of_bottom_five_deciles"]
+            >= column["rest_of_credit_share_of_bottom_five_deciles"]
+        ):
+            raise AssertionError(f"{label}: the bonus reaches lower than the rest")
+        results[f"{label}_gini_change_with_the_bonus"] = float(
+            column["gini_with_the_bonus"] - column["gini_without_the_bonus"]
+        )
+    return results
+
+
 def main(
     work: Path, rerun: Path, march: Path, ecps: Path, cps: Path, poverty: Path
 ) -> None:
@@ -915,6 +1003,8 @@ def main(
         | check_agi_cap_run(work)
         | check_against_api(work)
     )
+    comparison = data_comparison(ecps, cps, work, poverty)
+    invariants |= check_the_answer_on_every_file(comparison)
     years, ladder, orders = reconciliation(march, ecps, work)
     provisions = pd.concat(
         [provision_comparison(), pd.DataFrame([agi_cap_provision(work, poverty)])],
@@ -930,7 +1020,8 @@ def main(
         "versus_reeves_estimate": versus_reeves(work),
         "march_2025_ladder": ladder,
         "march_2025_step_orders": orders,
-        "data_comparison_2026": data_comparison(ecps, cps, work, poverty),
+        "data_comparison_2026": comparison,
+        "deciles_by_data_file_2026": deciles_by_data_file(ecps, cps, work),
     }
     for name, table in indexed.items():
         table.to_csv(RESULTS / f"{name}.csv")

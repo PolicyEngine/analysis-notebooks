@@ -21,7 +21,6 @@ from pathlib import Path
 
 import numpy as np
 from policyengine.tax_benefit_models.us import managed_microsimulation
-
 from run import without_saved_spm_outputs
 
 TAX_UNIT_VARIABLES = (

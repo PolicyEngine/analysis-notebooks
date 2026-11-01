@@ -31,6 +31,8 @@ def small_run() -> dict[str, np.ndarray]:
         "person.person_household_id": np.array([10, 10, 10, 10, 20, 20]),
         "person.age": np.array([40, 39, 6, 25, 33, 7]),
         "person.is_household_head": np.array([1, 0, 0, 0, 1, 0], dtype=bool),
+        "person.is_tax_unit_dependent": np.array([0, 0, 1, 0, 0, 1], dtype=bool),
+        "tax_unit.income_tax": np.array([9_000.0, 0.0, 500.0]),
     }
 
 
@@ -39,7 +41,7 @@ def test_counts_at_each_entity_weight():
     assert result["children_under_18"] == 5
     assert result["households"] == 5
     assert result["married_couple_households"] == 2
-    assert result["married_couple_households_with_child"] == 2
+    assert result["married_couple_households_with_own_child"] == 2
     assert result["children_in_married_couple_households"] == 2
     assert result["share_of_children_in_married_couple_households"] == 2 / 5
     assert result["children_in_married_tax_units"] == 2

@@ -23,7 +23,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from reweight import household_position
+from reweight import household_moments, household_position
 
 RESULTS = Path(__file__).parent / "results"
 
@@ -77,10 +77,10 @@ BENCHMARKS = (
     Benchmark("households", 132_737_146, "acs", "B11001_001E"),
     Benchmark("married_couple_households", 61_980_084, "acs", "B11001_003E"),
     Benchmark(
-        "married_couple_households_with_child",
+        "married_couple_households_with_own_child",
         22_978_636,
         "acs",
-        "B11003_003E, own children; the 2020 Census counted 22,284,317 (P20_003N)",
+        "B11003_003E; the 2020 Census counted 22,284,317 (P20_003N)",
     ),
     Benchmark(
         "children_in_married_couple_households",
@@ -157,10 +157,6 @@ def measures(run: dict[str, np.ndarray]) -> dict[str, float]:
     """Return each benchmark's measure for one file, at the file's own weights."""
     unit_ids = run["tax_unit.tax_unit_id"]
     person_unit = household_position(unit_ids, run["person.person_tax_unit_id"])
-    household_ids = run["household.household_id"]
-    person_household = household_position(
-        household_ids, run["person.person_household_id"]
-    )
     status = run["tax_unit.filing_status"]
     if not np.isin(status, FILING_STATUSES).all():
         raise ValueError(f"unknown filing status in {sorted(set(status))}")
@@ -170,20 +166,13 @@ def measures(run: dict[str, np.ndarray]) -> dict[str, float]:
     filer = run["tax_unit.tax_unit_is_filer"].astype(bool)
     unit_weight = run["tax_unit.tax_unit_weight"].astype(float)
     household_weight = run["household.household_weight"].astype(float)
+    in_households = household_moments(run)
     income = run["tax_unit.adjusted_gross_income"].astype(float)
-    age = run["person.age"]
-    child = age < 18
-    head = run["person.is_household_head"].astype(bool)
+    child = run["person.age"] < 18
 
     children_in_unit = np.bincount(
         person_unit, weights=child.astype(float), minlength=unit_ids.size
     )
-    children_in_household = np.bincount(
-        person_household, weights=child.astype(float), minlength=household_ids.size
-    )
-    married_head = np.zeros(household_ids.size, dtype=bool)
-    married_head[person_household[head & married[person_unit]]] = True
-
     # The IRS reports the credit after the tax limit, and the model's
     # non_refundable_ctc comes before it.
     credit = np.minimum(
@@ -199,18 +188,19 @@ def measures(run: dict[str, np.ndarray]) -> dict[str, float]:
 
     return {
         "children_under_18": float(child_weight.sum()),
-        "households": float(household_weight.sum()),
-        "married_couple_households": weighted_count(married_head, household_weight),
-        "married_couple_households_with_child": weighted_count(
-            married_head & (children_in_household > 0), household_weight
-        ),
-        "children_in_married_couple_households": float(
-            household_weight @ (children_in_household * married_head)
-        ),
+        **{
+            name: float(household_weight @ in_households[name])
+            for name in (
+                "households",
+                "married_couple_households",
+                "married_couple_households_with_own_child",
+                "children_in_married_couple_households",
+            )
+        },
         "share_of_children_in_married_couple_households": float(
             household_weight
-            @ (children_in_household * married_head)
-            / (household_weight @ children_in_household)
+            @ in_households["children_in_married_couple_households"]
+            / (household_weight @ in_households["children_under_18"])
         ),
         "children_in_married_tax_units": float(child_weight @ married),
         "share_of_children_in_married_tax_units": float(

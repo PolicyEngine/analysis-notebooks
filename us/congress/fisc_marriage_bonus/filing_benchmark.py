@@ -31,8 +31,11 @@ TAX_UNIT_VARIABLES = (
     "income_tax",
     "tax_unit_is_filer",
     "ctc_qualifying_children",
+    "ctc_limiting_tax_liability",
 )
-TAX_UNIT_CREDITS = ("non_refundable_ctc", "refundable_ctc")
+# The model's non_refundable_ctc comes before the tax liability limit, and the IRS
+# reports the credit after it, so the benchmark needs the liability as well.
+TAX_UNIT_CREDITS = ("ctc", "non_refundable_ctc", "refundable_ctc")
 PERSON_VARIABLES = (
     "person_tax_unit_id",
     "person_household_id",

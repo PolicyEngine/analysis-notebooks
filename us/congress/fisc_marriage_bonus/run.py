@@ -25,6 +25,7 @@ import numpy as np
 from policyengine.tax_benefit_models.us import managed_microsimulation
 
 from analysis import SCENARIOS, uncapped_credit
+from reweight import apply_weight_factors
 
 HOUSEHOLD_VARIABLES = (
     "household_id",
@@ -118,6 +119,7 @@ def run(
     dataset: str | None = None,
     detail: bool = False,
     people: bool = False,
+    weight_factors: Path | None = None,
 ) -> Path:
     policy = SCENARIOS[scenario]
     source = (
@@ -126,6 +128,8 @@ def run(
         else {}
     )
     sim = managed_microsimulation(reform=policy or None, **source)
+    if weight_factors is not None:
+        apply_weight_factors(sim, year, weight_factors)
     if scenario == "fisc_no_agi_cap":
         remove_the_agi_cap(sim, year)
 
@@ -186,7 +190,20 @@ if __name__ == "__main__":
         action="store_true",
         help="Also save ages and weights, for a dataset this model's SPM code refuses.",
     )
+    parser.add_argument(
+        "--weight-factors",
+        type=Path,
+        help="Household weight factors from reweight.py, for the sensitivity run.",
+    )
     args = parser.parse_args()
     print(
-        run(args.scenario, args.year, args.out, args.dataset, args.detail, args.people)
+        run(
+            args.scenario,
+            args.year,
+            args.out,
+            args.dataset,
+            args.detail,
+            args.people,
+            args.weight_factors,
+        )
     )

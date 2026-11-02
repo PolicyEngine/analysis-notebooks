@@ -7,6 +7,7 @@ results/.
 from __future__ import annotations
 
 import json
+from fractions import Fraction
 
 import numpy as np
 import pytest
@@ -619,23 +620,50 @@ def test_a_small_target_is_met_when_the_weights_shrink_to_it():
     at the starting weights and well above rounding at the final ones."""
     weights = np.array([1e10])
     factors = entropy_balance(weights, np.array([[1.0]]), np.array([1.0]))
-    assert weights * factors == pytest.approx([1.0], rel=1e-9)
+    assert weights * factors == pytest.approx([1.0], rel=1e-9, abs=0)
 
     weights = np.array([1.0, 2.0, 1.0])
     moments = np.array([[1.0, 1.0, 1.0], [0.0, 0.0, 1.0], [1.0, -1.0, 0.0]])
     targets = np.array([4.0, 4.0 - 1e-6, 1e-10])
     reached = moments @ (weights * entropy_balance(weights, moments, targets))
-    assert reached == pytest.approx(targets, rel=1e-9)
+    assert reached == pytest.approx(targets, rel=1e-9, abs=0)
+
+
+def exact_miss(weights, moment, target):
+    """The miss in exact arithmetic on the doubles the solve returns."""
+    reached = sum(
+        Fraction(float(m)) * Fraction(float(w)) for m, w in zip(moment, weights)
+    )
+    return float(reached - Fraction(float(target)))
+
+
+def test_rounding_cannot_hide_a_miss():
+    """Review 14's case: cancellation leaves a computed miss inside tolerance
+    while the exact miss sits outside it, so the solve must keep going."""
+    weights = np.ones(3)
+    moment = np.array([500_000.0, 1 + 1.01e-9, -500_000.0])
+    assert abs(exact_miss(weights, moment, 1.0)) > 1e-9
+    reweighted = weights * entropy_balance(weights, moment[None, :], np.array([1.0]))
+    assert abs(exact_miss(reweighted, moment, 1.0)) < 1e-9
 
 
 @pytest.mark.parametrize(
-    ("weights", "target"),
-    [([2.0, 1.0], 1e-12), ([1e9, 1e9], 1e-6), ([1.0, 1.0], 2.0**-25)],
+    ("weights", "moment", "target"),
+    [
+        ([2.0, 1.0], [1.0, -1.0], 1e-12),
+        ([1e9, 1e9], [1.0, -1.0], 1e-6),
+        ([1.0, 1.0], [1.0, -1.0], 2.0**-25),
+        # Products this small underflow, so the computed miss reads zero.
+        ([5e-324], [1.49], 5e-324),
+        # The bound covers the worst case, so it refuses this target although the
+        # starting weights hit it exactly.
+        ([1.0, 1.0], [1.0, -1.0 + 2.0**-25], 2.0**-25),
+    ],
 )
-def test_a_target_this_near_zero_must_be_zero(weights, target):
-    """Each tolerance falls below the rounding of a two-record sum."""
-    with pytest.raises(ValueError, match="must be zero"):
-        entropy_balance(np.array(weights), np.array([[1.0, -1.0]]), np.array([target]))
+def test_a_target_this_near_zero_must_be_zero(weights, moment, target):
+    """Each tolerance falls below the rounding bound on its moment's sum."""
+    with pytest.raises(ValueError, match="must be zero"), np.errstate(over="ignore"):
+        entropy_balance(np.array(weights), np.array([moment]), np.array([target]))
 
 
 def test_balancing_refuses_targets_no_positive_weights_can_reach():

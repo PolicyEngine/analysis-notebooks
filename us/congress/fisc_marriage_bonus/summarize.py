@@ -785,7 +785,7 @@ def check_against_api(work: Path) -> dict:
     results: dict[str, object] = {}
 
     direct = api_result(FISC, NO_BONUS, PRIMARY_YEAR)
-    for year in CHECK_YEARS:
+    for year in ARRAY_YEARS:
         results |= bonus_gap_from_api(work, year)
 
     comparisons = {

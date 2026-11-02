@@ -290,7 +290,7 @@ The local runs and the API use the same bundle. Local and API reform differences
 - Each household's credit equals the sum of its tax units' credits, rebuilt through person links.
 - The bonus measured by income tax and by net income each sit within 0.1 percent of the bonus measured by the credit.
 - The `fisc_no_agi_cap` credit equals the uncapped formula at every AGI, and that run pays credit at zero and negative AGI.
-- Local and API results agree on the bonus in 2026 and 2035, the decile means and totals, the Gini in seven scenarios, and the poverty rates, within the tolerances `summarize.py` states.
+- Local and API results agree on the bonus in 2026, 2031 and 2035, the decile means and totals, the Gini in seven scenarios, and the poverty rates, within the tolerances `summarize.py` states.
 - Every saved array holds finite numbers. On each data file, saved deciles match a fresh person-weighted ranking of net income, and saved equivalised income equals net income over the square root of household size to within a dollar plus two single-precision steps.
 - Text columns hold text and every other column holds finite numbers. Blanks fall only in the cells each table leaves empty, and `invariants.json` refuses a NaN before any table reaches disk.
 - The runs that saved the detail arrays match the runs in the work folder, array for array.

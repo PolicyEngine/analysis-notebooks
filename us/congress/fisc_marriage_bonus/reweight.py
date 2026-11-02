@@ -182,11 +182,12 @@ def household_moments(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
             person_household, weights=values.astype(float), minlength=households
         )
 
-    married_head = per_household(head & unit_married[person_unit]) > 0
+    dependent = run["person.is_tax_unit_dependent"].astype(bool)
+    # A head who is someone's dependent heads no married couple, even when the
+    # unit they belong to files jointly, and is no one's own child.
+    married_head = per_household(head & ~dependent & unit_married[person_unit]) > 0
     own_child = per_household(
-        (age < 18)
-        & run["person.is_tax_unit_dependent"].astype(bool)
-        & np.isin(person_unit, person_unit[head])
+        (age < 18) & dependent & ~head & np.isin(person_unit, person_unit[head])
     )
     unit_household = np.zeros(run["tax_unit.tax_unit_id"].size, dtype=int)
     unit_household[person_unit] = person_household
@@ -326,10 +327,26 @@ def entropy_balance(
     raise ValueError("entropy balancing did not reach the targets")
 
 
-def apply_weight_factors(sim, year: int, path: Path) -> None:
-    """Multiply each household's weight for this year by its saved factor."""
+def load_factors(path: Path) -> tuple[np.ndarray, np.ndarray]:
+    """The household ids and weight factors a calibration saved, checked first.
+
+    A NaN would turn every comparison against the factors false, so a file must
+    hold one finite, positive factor for each distinct household.
+    """
     with np.load(path) as saved:
         household_ids, factors = saved["household_id"], saved["factor"]
+    if household_ids.ndim != 1 or factors.shape != household_ids.shape:
+        raise ValueError(f"{path}: the factors and household ids differ in shape")
+    if not np.all(np.isfinite(factors) & (factors > 0)):
+        raise ValueError(f"{path}: a factor is not finite and positive")
+    if np.unique(household_ids).size != household_ids.size:
+        raise ValueError(f"{path}: a household appears twice")
+    return household_ids, factors
+
+
+def apply_weight_factors(sim, year: int, path: Path) -> None:
+    """Multiply each household's weight for this year by its saved factor."""
+    household_ids, factors = load_factors(path)
 
     def household_values(variable: str) -> np.ndarray:
         return np.asarray(sim.calculate(variable, period=year).values, dtype=float)

@@ -10,12 +10,14 @@
 run.py saves every array a year's tables need. A ten-year total on a second set
 of weights needs far less, so each year here holds two microsimulations, FISC
 and FISC with the bonus at zero, and saves their weighted totals to
-<work-dir>/decade_<year>.json. summarize.py reads those files.
+<work-dir>/decade_<year>.json with the sha256 of the factor file. summarize.py
+reads those files.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -52,11 +54,13 @@ def run(year: int, out: Path, weight_factors: Path) -> Path:
         results[scenario], bundle = scenario_totals(scenario, year, weight_factors)
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"decade_{year}.json"
-    path.write_text(
-        json.dumps(
-            {"year": year, "totals": results, "bundle": bundle}, indent=2, default=str
-        )
-    )
+    record = {
+        "year": year,
+        "totals": results,
+        "bundle": bundle,
+        "factors_sha256": hashlib.sha256(weight_factors.read_bytes()).hexdigest(),
+    }
+    path.write_text(json.dumps(record, indent=2, default=str))
     return path
 
 

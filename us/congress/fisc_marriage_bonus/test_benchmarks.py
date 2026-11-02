@@ -137,6 +137,16 @@ def test_the_advance_share_leaves_out_units_past_the_phase_out():
     assert measures(run)["share_of_advance_children_joint"] == 0
 
 
+def test_a_surviving_spouse_takes_the_200000_advance_threshold():
+    run = small_run()
+    run["tax_unit.filing_status"] = np.array(["SURVIVING_SPOUSE", "SINGLE", "JOINT"])
+    # $300,000 clears the joint threshold and passes the one for everyone else.
+    run["tax_unit.adjusted_gross_income"] = np.array([300_000.0, 9_000.0, 300_000.0])
+    # The surviving spouse's child drops out of the advance payments, so every
+    # child left in them sits in the joint unit.
+    assert measures(run)["share_of_advance_children_joint"] == 1
+
+
 def test_income_bands_cover_every_filer_once():
     result = measures(small_run())
     bands = [f"joint_filers_agi_{item[0]}" for item in MARRIED_RETURNS_BY_AGI]

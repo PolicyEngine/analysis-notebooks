@@ -34,6 +34,7 @@ from reweight import (
     family_income_moments,
     household_moments,
     household_position,
+    load_factors,
 )
 
 RESULTS = Path(__file__).parent / "results"
@@ -198,8 +199,9 @@ def measures(run: dict[str, np.ndarray]) -> dict[str, float]:
     )
     credit = child_credit_after_tax_limit(run)
     claimed = credit > 0
+    # Section 24(h)(3) keeps the $400,000 threshold for joint returns alone.
     limit = np.where(
-        np.isin(status, (JOINT, SURVIVING_SPOUSE)),
+        status == JOINT,
         ADVANCE_LIMIT_JOINT,
         ADVANCE_LIMIT_OTHER,
     )
@@ -318,10 +320,10 @@ def load_file(spec: str) -> tuple[str, dict[str, np.ndarray]]:
     run = load_run(Path(work))
     if not factors:
         return name, run
-    with np.load(factors) as saved:
-        if not np.array_equal(saved["household_id"], run["household.household_id"]):
-            raise ValueError(f"{factors} belongs to another file's households")
-        return name, with_weight_factors(run, saved["factor"])
+    household_ids, weight_factors = load_factors(Path(factors))
+    if not np.array_equal(household_ids, run["household.household_id"]):
+        raise ValueError(f"{factors} belongs to another file's households")
+    return name, with_weight_factors(run, weight_factors)
 
 
 if __name__ == "__main__":

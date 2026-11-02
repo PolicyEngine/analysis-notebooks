@@ -6,6 +6,7 @@ results/.
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 import numpy as np
@@ -912,6 +913,7 @@ class TestReweightedDecade:
             record = {
                 "year": file_year,
                 "bundle": BUNDLE,
+                "factors_sha256": hashlib.sha256(factors.read_bytes()).hexdigest(),
                 "totals": {
                     "fisc": totals("fisc"),
                     "fisc_no_bonus": totals("fisc_no_bonus"),
@@ -1016,9 +1018,44 @@ class TestReweightedDecade:
             self.table(decade)
 
     def test_factors_for_other_households_raise(self, decade):
-        factors = decade[3]
+        factors, save_year = decade[3], decade[-1]
         np.savez(factors, household_id=np.arange(N)[::-1], factor=np.full(N, FACTOR))
+        for year in summarize.YEARS:
+            save_year(year)
         with pytest.raises(AssertionError, match="other households"):
+            self.table(decade)
+
+    @pytest.mark.parametrize("recorded", ["0" * 64, None])
+    def test_a_year_run_on_other_factors_raises(self, decade, recorded):
+        # Another set's factors can give a ratio inside the margin, so only the
+        # file's hash tells the years apart.
+        decade[-1](2031, factors_sha256=recorded)
+        with pytest.raises(AssertionError, match="other factors"):
+            self.table(decade)
+
+    def test_a_nan_factor_raises_before_any_comparison(self, decade):
+        factors, save_year = decade[3], decade[-1]
+        factor = np.full(N, FACTOR)
+        factor[0] = np.nan
+        np.savez(factors, household_id=np.arange(N), factor=factor)
+        for year in summarize.YEARS:
+            save_year(year)
+        with pytest.raises(ValueError, match="finite and positive"):
+            self.table(decade)
+
+    def test_an_end_year_bonus_off_by_under_one_percent_raises(self, decade):
+        # Moving the credit and income tax together leaves each scenario's
+        # totals inside the tolerance while the bonus moves 0.8%.
+        *_, totals, save_year = decade
+        fisc = totals("fisc")
+        shift = 0.008 * decade[4]
+        assert shift < summarize.RELATIVE_TOLERANCE * min(
+            abs(fisc["family_income_supplement_credit"]), abs(fisc["income_tax"])
+        )
+        fisc["family_income_supplement_credit"] += shift
+        fisc["income_tax"] -= shift
+        save_year(2035, totals={"fisc": fisc, "fisc_no_bonus": totals("fisc_no_bonus")})
+        with pytest.raises(AssertionError, match="bonus misses"):
             self.table(decade)
 
     def test_each_set_keeps_its_own_rows_and_text_years(self, decade):

@@ -91,6 +91,18 @@ def test_an_own_child_must_share_the_heads_tax_unit():
     assert moments["children_in_married_couple_households"].tolist() == [0, 2]
 
 
+def test_a_dependent_head_does_not_make_a_married_couple_household():
+    run = small_run()
+    # The 16-year-old heads the home but sits as a dependent in the parents'
+    # joint unit, and the parents are not the householder.
+    run["person.age"] = np.array([59, 58, 16, 30, 12, 70])
+    run["person.is_household_head"] = np.array([0, 0, 1, 1, 0, 1], dtype=bool)
+    moments = household_moments(run)
+    assert moments["married_couple_households"].tolist() == [0, 0, 0]
+    assert moments["married_couple_households_with_own_child"].tolist() == [0, 0, 0]
+    assert moments["children_in_married_couple_households"].tolist() == [0, 0, 0]
+
+
 def test_a_surviving_spouse_does_not_make_a_married_couple_household():
     run = small_run()
     run["tax_unit.filing_status"] = np.array(
@@ -346,6 +358,24 @@ def test_factors_from_another_file_raise(tmp_path):
     path = save_factors(tmp_path / "f.npz", [1, 3], [0.5, 2.0])
     sim = FakeSimulation(np.array([3, 1]), np.array([10.0, 20.0]))
     with pytest.raises(ValueError, match="another file"):
+        apply_weight_factors(sim, 2026, path)
+
+
+@pytest.mark.parametrize(
+    ("ids", "factors", "message"),
+    [
+        ([3, 1], [np.nan, 2.0], "finite and positive"),
+        ([3, 1], [0.0, 2.0], "finite and positive"),
+        ([3, 1], [np.inf, 2.0], "finite and positive"),
+        ([3, 3], [0.5, 2.0], "appears twice"),
+        ([3, 1], [0.5], "differ in shape"),
+    ],
+)
+def test_a_factor_file_that_cannot_reweight_raises(tmp_path, ids, factors, message):
+    # A NaN makes every later comparison false, so it has to fail at the load.
+    path = save_factors(tmp_path / "f.npz", ids, factors)
+    sim = FakeSimulation(np.array([3, 1]), np.array([10.0, 20.0]))
+    with pytest.raises(ValueError, match=message):
         apply_weight_factors(sim, 2026, path)
 
 

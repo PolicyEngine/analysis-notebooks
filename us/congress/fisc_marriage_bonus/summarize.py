@@ -11,6 +11,7 @@ after every check passes, so that file exists only for a run that passed.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -31,6 +32,7 @@ from analysis import (
     weighted_gini,
 )
 from benchmarks import with_weight_factors
+from reweight import load_factors
 
 HERE = Path(__file__).parent
 RESULTS = HERE / "results"
@@ -566,10 +568,14 @@ def check_comparison_file(folder: Path, label: str) -> dict:
     return results | {f"{label}_bonus_measured_by_the_credit": bonus}
 
 
-def read_factors(path: Path) -> dict[str, np.ndarray]:
-    """The household ids and weight factors reweight.py saved."""
-    with np.load(path) as saved:
-        return {"household_id": saved["household_id"], "factor": saved["factor"]}
+def read_factors(path: Path) -> dict:
+    """The household ids, weight factors and file hash reweight.py saved."""
+    household_ids, factors = load_factors(path)
+    return {
+        "household_id": household_ids,
+        "factor": factors,
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }
 
 
 def check_reweighted_run(work: Path, folder: Path, factors: Path, label: str) -> None:
@@ -1384,7 +1390,12 @@ def reweighted_comparison(
 def check_arrays_behind_the_decade(
     year: int, totals: dict, work: Path, saved: dict[str, np.ndarray]
 ) -> None:
-    """The current run's arrays for a year, at these factors, must give its totals."""
+    """The current run's arrays for a year, at these factors, must give its totals.
+
+    Each scenario's totals must match, and so must the bonus between them, since a
+    small error in a large total can be a large error in the bonus.
+    """
+    from_arrays = {}
     for scenario, measured in totals.items():
         arrays = load(work, scenario, year)
         if not np.array_equal(saved["household_id"], arrays["household.household_id"]):
@@ -1392,17 +1403,23 @@ def check_arrays_behind_the_decade(
         weight = with_weight_factors(arrays, saved["factor"])[
             "tax_unit.tax_unit_weight"
         ]
+        from_arrays[scenario] = {}
         for name, expected in (
             ("family_income_supplement_credit", arrays[CREDIT]),
             ("income_tax", arrays[INCOME_TAX]),
         ):
-            from_arrays = float(expected @ weight)
-            if abs(measured[name] - from_arrays) > RELATIVE_TOLERANCE * abs(
-                from_arrays
+            from_arrays[scenario][name] = float(expected @ weight)
+            if abs(measured[name] - from_arrays[scenario][name]) > (
+                RELATIVE_TOLERANCE * abs(from_arrays[scenario][name])
             ):
                 raise AssertionError(
                     f"{year}: {scenario} misses the current run at these weights"
                 )
+    for name in ("family_income_supplement_credit", "income_tax"):
+        expected = from_arrays["fisc"][name] - from_arrays["fisc_no_bonus"][name]
+        measured = totals["fisc"][name] - totals["fisc_no_bonus"][name]
+        if abs(measured - expected) > RELATIVE_TOLERANCE * abs(expected):
+            raise AssertionError(f"{year}: the bonus misses the current run's arrays")
 
 
 def check_years_between(table: pd.DataFrame, current_bonus: pd.Series) -> None:
@@ -1425,9 +1442,11 @@ def reweighted_decade(
 ) -> pd.DataFrame:
     """Each year's bonus on one set of weights, from decade.py's two runs a year.
 
-    The current run saved arrays for 2026 and 2035, so those years must match them
-    at these factors. Every other year must hold the set's ratio to the current
-    bonus, so a year run on the file's own weights or another reform can't pass.
+    Every year must record the sha256 of this set's factor file. The current run
+    saved arrays for 2026 and 2035, so those years must match them at these
+    factors, bonus included. The other years must hold the set's ratio to the
+    current bonus, which catches a year run on another reform or with the wrong
+    weights unless its ratio lands within the margin.
     """
     bundle = json.loads((work / f"fisc_{PRIMARY_YEAR}.json").read_text())["bundle"]
     saved = read_factors(factors)
@@ -1438,6 +1457,8 @@ def reweighted_decade(
             raise AssertionError(f"decade_{year}.json holds {decade_year['year']}")
         if decade_year["bundle"] != bundle:
             raise AssertionError(f"{year}: the decade run used another bundle")
+        if decade_year.get("factors_sha256") != saved["sha256"]:
+            raise AssertionError(f"{year}: the decade run used other factors")
         totals = decade_year["totals"]
         fisc, no_bonus = totals["fisc"], totals["fisc_no_bonus"]
         if year in CHECK_YEARS:

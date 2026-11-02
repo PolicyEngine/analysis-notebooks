@@ -4,7 +4,7 @@ Richard Reeves asked PolicyEngine to rerun FISC reform 76612 with the 20 percent
 
 ## Result
 
-On the current dataset, which the app runs, the bonus costs $34.3 billion in 2026 and $334.5 billion over 2026-2035, the sum of ten calendar years in nominal dollars with no discounting. That dataset holds more married parents than outside sources count. Four sets of weights that match those sources put the 2026 bonus between $27.5 billion and $30.6 billion, and the runs at either end put 2026-2035 between @@ALL_DECADE@@ and @@INCOME_DECADE@@. [Benchmarks](#benchmarks-outside-the-cps) and [Four sets of weights](#four-sets-of-weights) set out those runs.
+On the current dataset, which the app runs, the bonus costs $34.3 billion in 2026 and $334.5 billion over 2026-2035, the sum of ten calendar years in nominal dollars with no discounting. That dataset holds more married parents than outside sources count. Reweighted to match those sources, the bonus costs $27.3 billion and $28.5 billion in 2026 on the two runs that match the IRS child credit lines, and $30.3 billion and $30.6 billion on the two that match only Census counts, close to Reeves's $30 billion. Over 2026-2035 the four runs give $267.5 billion to $296.7 billion. [Benchmarks](#benchmarks-outside-the-cps) and [Four sets of weights](#four-sets-of-weights) set out those runs.
 
 The next table comes from the current dataset through the production API.
 
@@ -28,7 +28,7 @@ The figure depends on the data file. The same model and reform put the 2026 bonu
 
 ### Who receives it, 2026
 
-These rows use the current dataset and rank households on current-law household net income, the app's standard decile. [Four sets of weights](#four-sets-of-weights) shows how far they move, and low-income married families drive most of that move.
+These rows use the current dataset and rank households on current-law household net income, the app's standard decile. [Four sets of weights](#four-sets-of-weights) shows how far they move, and the targets on married families by income drive most of that move.
 
 | Decile | Bonus | Share of the bonus | Households receiving | Mean per household | Percent of income |
 |---|---|---|---|---|---|
@@ -95,7 +95,7 @@ The child tax credit that FISC repeals scores +0.084 on household income and -0.
 
 ### Against the $30 billion estimate
 
-Reeves's back-of-envelope figure, "arithmetic on the married share", came to about $30 billion a year. The four reweighted runs bracket it at $27.5 billion to $30.6 billion, and the model's $34.3 billion on the current dataset exceeds it by $4.3 billion, or 14 percent. At 20 percent, $30 billion implies a $150 billion married base. In the model joint filers hold $204.5 billion of base amount, 72 percent of $284.3 billion, before the limits apply, and $170.3 billion of credit once they apply, 70 percent of $244.3 billion. Twenty percent of the first gives the $40.9 billion statutory bonus, and the limits take that to $34.3 billion. On the March 2025 data, joint filers hold $153.1 billion of base amount, which sits close to the implied $150 billion and gives a $30.6 billion statutory bonus. The CPS resample gives a $29.6 billion bonus after the limits. `results/versus_reeves_estimate.csv` and `results/data_comparison_2026.csv` hold these lines. We do not know the inputs behind the $30 billion, so this analysis makes no claim about where the figures part.
+Reeves's back-of-envelope figure, "arithmetic on the married share", came to about $30 billion a year. The four reweighted runs bracket it at $27.3 billion to $30.6 billion, and the model's $34.3 billion on the current dataset exceeds it by $4.3 billion, or 14 percent. At 20 percent, $30 billion implies a $150 billion married base. In the model joint filers hold $204.5 billion of base amount, 72 percent of $284.3 billion, before the limits apply, and $170.3 billion of credit once they apply, 70 percent of $244.3 billion. Twenty percent of the first gives the $40.9 billion statutory bonus, and the limits take that to $34.3 billion. On the March 2025 data, joint filers hold $153.1 billion of base amount, which sits close to the implied $150 billion and gives a $30.6 billion statutory bonus. The CPS resample gives a $29.6 billion bonus after the limits. `results/versus_reeves_estimate.csv` and `results/data_comparison_2026.csv` hold these lines. We do not know the inputs behind the $30 billion, so this analysis makes no claim about where the figures part.
 
 ### Against the March 2025 estimate
 
@@ -166,22 +166,22 @@ Today's model refuses the March 2025 file as it stands, because the file saves a
 | 2024 | Published | March 2025 data | CPS resample | Current dataset | Household counts | Family income | Child credit | All targets |
 |---|---|---|---|---|---|---|---|---|
 | Children under 18 | 72.55M | 74.76M | 68.42M | 76.68M | 72.55M | 72.55M | 72.55M | 72.55M |
-| Infants under 1 | 3.62M | 3.84M | 2.97M | 2.75M | 2.76M | 3.62M | 2.92M | 3.62M |
+| Infants under 1 | 3.62M | 3.84M | 2.97M | 2.75M | 2.76M | 3.62M | 2.94M | 3.62M |
 | Married-couple households | 61.98M | 67.97M | 66.48M | 80.87M | 61.98M | 61.98M | 61.98M | 61.98M |
 | With an own child under 18 | 22.98M | 23.58M | 24.64M | 27.47M | 22.98M | 22.98M | 22.98M | 22.98M |
 | Children in those households | 48.55M | 40.69M | 47.85M | 55.89M | 48.43M | 48.43M | 48.43M | 48.43M |
-| Those families under $25,000 | 0.72M | 3.35M | 0.99M | 2.88M | 2.50M | 0.72M | 2.96M | 0.72M |
-| Joint plus separate filers | 58.71M | 63.61M | 62.86M | 83.14M | 66.23M | 66.22M | 65.45M | 65.33M |
-| All filers | 160.60M | 153.44M | 145.94M | 158.03M | 180.79M | 180.50M | 181.95M | 182.85M |
-| Head of household filers | 21.60M | 16.69M | 11.02M | 13.06M | 16.32M | 16.46M | 19.91M | 20.36M |
-| Joint returns with child credit | 22.27M | 19.44M | 22.15M | 29.59M | 24.50M | 26.37M | 22.27M | 22.27M |
-| Child credit on joint returns | $60.3B | $50.0B | $64.9B | $77.0B | $65.4B | $74.5B | $60.3B | $60.3B |
-| Child credit on other returns | $24.1B | $21.0B | $14.1B | $12.3B | $14.8B | $14.7B | $24.1B | $24.1B |
-| Joint filers under $25,000 AGI | 4.93M | 11.29M | 5.28M | 16.74M | 14.15M | 12.89M | 14.85M | 13.70M |
-| Children outside joint units | at least 25.77M | 34.49M | 20.81M | 21.35M | 24.15M | 24.23M | 26.48M | 27.74M |
-| Infants in joint units | 60.5% CDC, 69.9% ACS | 49.9% | 70.5% | 73.0% | 65.8% | 64.5% | 59.5% | 55.6% |
+| Those families under $25,000 | 0.72M | 3.35M | 0.99M | 2.88M | 2.50M | 0.72M | 3.01M | 0.72M |
+| Married filers | 58.71M | 66.05M | 65.16M | 85.04M | 69.45M | 69.44M | 68.53M | 58.71M |
+| All filers | 160.60M | 153.44M | 145.94M | 158.03M | 180.79M | 180.50M | 182.27M | 160.60M |
+| Head of household filers | 21.60M | 16.69M | 11.02M | 13.06M | 16.32M | 16.46M | 20.37M | 21.60M |
+| Married returns with child credit | 22.27M | 19.46M | 22.20M | 29.74M | 24.79M | 26.68M | 22.27M | 22.27M |
+| Child credit on married returns | $60.3B | $50.0B | $64.9B | $77.1B | $65.5B | $74.7B | $60.3B | $60.3B |
+| Child credit on other returns | $24.1B | $21.0B | $14.1B | $12.2B | $14.6B | $14.6B | $24.1B | $24.1B |
+| Married filers under $25,000 AGI | 5.77M | 12.03M | 5.97M | 17.37M | 15.22M | 13.97M | 16.00M | 5.77M |
+| Children outside joint units | at least 25.77M | 34.49M | 21.48M | 21.74M | 24.67M | 24.74M | 26.90M | 27.87M |
+| Infants in joint units | 60.5% CDC, 69.9% ACS | 49.9% | 70.5% | 73.0% | 65.8% | 64.5% | 59.0% | 53.4% |
 
-On family structure the CPS resample stands closest of the three files, and the current dataset overshoots most: 80.9 million married-couple households against 62.0 million, and 29.6 million joint returns with the child credit against 22.3 million. The March 2025 file holds about the right number of married families with too few children in them, 40.7 million against 48.6 million. The credit rows use the IRS measure: the nonrefundable child and other dependent credit after the tax liability limit.
+On married family structure the CPS resample stands closest of the three files, and the current dataset overshoots most: 80.9 million married-couple households against 62.0 million, and 29.7 million married returns with the child credit against 22.3 million. The March 2025 file holds about the right number of married families with too few children in them, 40.7 million against 48.6 million, and it stands closest on head of household filers and on credit outside married returns. The credit rows use the IRS measure: the nonrefundable child and other dependent credit after the tax liability limit.
 
 The income rows compare different measures, since the ACS reports family income and the model side uses the AGI of the household's tax units. The CPS resample uses the same model measure and holds 1.0 million such families under $25,000, so that gap does not explain the current dataset's 2.9 million. We have not traced why the current dataset holds those families or why it runs 24 percent short of infants.
 
@@ -189,38 +189,53 @@ The last two rows come from outside the targets. In 2021 the IRS paid advance ch
 
 ### Four sets of weights
 
-`reweight.py` changes each household's weight as little as it can, by entropy balancing, while it hits outside counts, and `run.py --weight-factors` reruns the reform on those weights. Every set holds people, people 65 and over, AGI and income tax at the dataset's own 2024 totals, so the experiment moves family structure and leaves those totals in place. These sets test the data and make no new dataset, since the targets belong in the data release ([PolicyEngine/microcosm#880](https://github.com/PolicyEngine/microcosm/issues/880)).
+`reweight.py` changes each household's weight as little as it can, by entropy balancing, while it hits outside counts, and `run.py --weight-factors` reruns the reform on those weights. Every set holds people, people 65 and over, AGI and income tax at the dataset's own 2024 totals, so the experiment moves family structure and leaves those totals in place. The ACS and the population estimates count children differently, so the married-household child target takes the ACS share of the population estimate's total, which gives the 48.43 million in the table above. These sets test the data and make no new dataset, since the targets belong in the data release ([PolicyEngine/microcosm#880](https://github.com/PolicyEngine/microcosm/issues/880)).
 
 | 2026 | Current dataset | Household counts | Family income | Child credit | All targets |
 |---|---|---|---|---|---|
 | Outside targets added | | Children, households, married households, own children | Household counts, infants, families by income | Household counts, IRS child credit | All of them, and IRS returns by status and AGI |
-| Bonus | $34.29B | $30.29B | $30.65B | $28.57B | $27.48B |
-| Full FISC, income tax given up | $145.30B | $140.83B | $137.00B | $135.98B | $136.32B |
-| Joint share of base amount | 71.9% | 66.3% | 66.0% | 63.2% | 61.0% |
-| Share of children in joint tax units | 71.6% | 66.0% | 65.9% | 63.1% | 61.4% |
-| Bottom five deciles' share of the bonus | 50.1% | 48.0% | 39.4% | 49.2% | 41.7% |
-| Top three deciles' share of the bonus | 22.9% | 25.7% | 29.7% | 25.3% | 27.0% |
-| Bottom five deciles' share of the rest of the credit | 61.3% | 60.9% | 56.3% | 59.6% | 56.0% |
-| Bottom five deciles' share of the bonus, equivalised income | 61.9% | 61.6% | 55.2% | 62.1% | 57.0% |
-| Gini without the bonus | 0.47012 | 0.47714 | 0.47017 | 0.47774 | 0.47206 |
-| Gini with the bonus | 0.46942 | 0.47663 | 0.46983 | 0.47722 | 0.47172 |
-| Equivalised Gini without the bonus | 0.44545 | 0.44293 | 0.42751 | 0.44253 | 0.43154 |
-| Equivalised Gini with the bonus | 0.44393 | 0.44157 | 0.42634 | 0.44122 | 0.43041 |
-| Bonus concentration, household income | +0.066 | +0.134 | +0.237 | +0.117 | +0.208 |
-| Rest of the credit, household income | -0.075 | -0.032 | +0.032 | -0.011 | +0.047 |
-| Largest weight factor | | 3.3 | 8.1 | 8.5 | 22.6 |
+| Bonus | $34.29B | $30.29B | $30.65B | $28.48B | $27.27B |
+| Full FISC, income tax given up | $145.30B | $140.83B | $137.00B | $136.00B | $133.11B |
+| Joint share of base amount | 71.9% | 66.3% | 66.0% | 63.0% | 60.9% |
+| Share of children in joint tax units | 71.6% | 66.0% | 65.9% | 62.9% | 61.6% |
+| Bottom five deciles' share of the bonus | 50.1% | 48.0% | 39.4% | 49.0% | 41.1% |
+| Top three deciles' share of the bonus | 22.9% | 25.7% | 29.7% | 25.4% | 26.5% |
+| Bottom five deciles' share of the rest of the credit | 61.3% | 60.9% | 56.3% | 59.5% | 56.4% |
+| Bottom five deciles' share of the bonus, equivalised income | 61.9% | 61.6% | 55.2% | 61.9% | 57.2% |
+| Gini without the bonus | 0.47012 | 0.47714 | 0.47017 | 0.47801 | 0.48237 |
+| Gini with the bonus | 0.46942 | 0.47663 | 0.46983 | 0.47750 | 0.48202 |
+| Equivalised Gini without the bonus | 0.44545 | 0.44293 | 0.42751 | 0.44251 | 0.44706 |
+| Equivalised Gini with the bonus | 0.44393 | 0.44157 | 0.42634 | 0.44121 | 0.44588 |
+| Bonus concentration, household income | +0.066 | +0.134 | +0.237 | +0.118 | +0.210 |
+| Rest of the credit, household income | -0.075 | -0.032 | +0.032 | -0.010 | +0.042 |
+| Largest weight factor |  | 3.3 | 8.1 | 10.0 | 35.0 |
+| Effective sample of households | 9,174 | 7,242 | 7,156 | 6,974 | 4,285 |
 
-Family structure moves the total, and the IRS credit moves it further. Household counts alone take $4.0 billion off the bonus. The IRS rows then shift credit from joint returns to other returns, which takes off $1.7 billion more on the household counts, and the all-target run lands at $27.5 billion.
+Family structure moves the total, and the IRS credit moves it further. Household counts alone take $4.0 billion off the bonus. The IRS rows then shift credit from married returns to other returns, which takes off $1.8 billion more, and the all-target run lands at $27.3 billion.
 
-Low-income married families move the distribution. The two sets that match the ACS income bands put the bottom five deciles' share at 39 and 42 percent, close to the CPS resample's 39 percent, and the two that leave them unmatched stay at 48 and 49 percent. So the 50 percent on the current dataset overstates how far the bonus reaches down, and about 40 percent fits the outside evidence better. On every set the bonus lowers the Gini, and the bottom five deciles receive less of it than of the rest of the credit.
+Married families by income move the distribution. The two sets that match the ACS income bands put the bottom five deciles' share at 39 and 41 percent, close to the CPS resample's 39 percent, and the two that leave them unmatched stay at 48 and 49 percent. So the 50 percent on the current dataset overstates how far the bonus reaches down, and about 40 percent fits the outside evidence better. On every set the bonus lowers the Gini, and the bottom five deciles receive less of it than of the rest of the credit.
 
-No set wins everywhere. Only the two child credit sets clear the IRS floor on children outside joint units. Family income leaves joint child credit at $74.5 billion against $60.3 billion, and all four sets leave too many low-income joint filers, 12.9 million to 14.9 million against 4.9 million, and too many filers overall. The all-target set falls below both birth measures, at 55.6 percent, and its largest weight factor reaches 22.6. We report the runs as a range and name no one set as correct.
+Those two sets inherit the gap between the ACS's family income and the AGI the model side uses. A weights-only check on the saved arrays, which adds household benefits to AGI in those bands, raises the bottom five deciles' share and lowers the bonus on both sets, by less than the two sets differ from each other. We keep the runs on AGI, so we give that direction and no figure.
+
+No set wins everywhere. The household counts and family income sets leave too many married returns with the child credit, 24.8 million and 26.7 million against 22.3 million, and family income leaves $74.7 billion of credit on them against $60.3 billion. Neither set clears the IRS floor on children outside joint units. The child credit set matches the credit lines and clears the floor, and it leaves 16.0 million married filers under $25,000 AGI against 5.8 million and 182.3 million filers against 160.6 million. The all-target set matches every line it targets and clears the floor. It falls below both birth measures, with 53.4 percent of infants in joint units, and it pays for that fit with a largest weight factor of 35.0 and an effective sample of 4,285 households, down from 9,174. We report the runs as a range and name no one set as correct. We lead with the two child credit sets because the IRS credit on married returns sits closest to what the bonus pays.
 
 The ten-year totals come from `decade.py`, which runs FISC and FISC with the bonus at zero for each year on a given set of weights.
 
-| Year | Household counts | Family income | All targets |
-|---|---|---|---|
-@@DECADE_ROWS@@
+| Year | Household counts | Family income | Child credit | All targets |
+|---|---|---|---|---|
+| 2026 | $30.29B | $30.65B | $28.48B | $27.27B |
+| 2027 | $30.28B | $30.54B | $28.46B | $27.29B |
+| 2028 | $30.28B | $30.45B | $28.45B | $27.28B |
+| 2029 | $30.10B | $30.17B | $28.29B | $27.15B |
+| 2030 | $29.86B | $29.83B | $28.07B | $26.98B |
+| 2031 | $29.73B | $29.63B | $27.95B | $26.89B |
+| 2032 | $29.51B | $29.30B | $27.76B | $26.70B |
+| 2033 | $29.18B | $28.83B | $27.46B | $26.34B |
+| 2034 | $28.93B | $28.46B | $27.23B | $26.03B |
+| 2035 | $28.56B | $27.98B | $26.90B | $25.61B |
+| 2026-2035 | $296.74B | $295.82B | $279.04B | $267.53B |
+
+Household counts gives the highest ten-year total even though family income starts higher, because family income's bonus falls faster: from $30.65 billion to $27.98 billion, against $30.29 billion to $28.56 billion.
 
 ## Method
 

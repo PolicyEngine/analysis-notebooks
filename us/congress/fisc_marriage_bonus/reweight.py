@@ -25,6 +25,7 @@ the run. The IRS targets read the model's filing status, as the IRS counts retur
 from __future__ import annotations
 
 import argparse
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -84,10 +85,15 @@ MARRIED_RETURNS_BY_AGI = (
 )
 
 # The 2024 ASEC's A_EXPRRP codes each person's relationship to the household's
-# reference person, whom the Census Bureau counts as the householder.
+# reference person, whom the Census Bureau counts as the householder, and A_MARITL
+# codes marital status.
 REFERENCE_PERSON_CODES = (1, 2)
 SPOUSE_CODES = (3, 4)
 OWN_CHILD_CODE = 5
+NEVER_MARRIED = 7
+ACS_SHARE_OF_CHILDREN_IN_MARRIED_COUPLE_HOUSEHOLDS = (
+    CHILDREN_MARRIED_HOUSEHOLD_2024 / CHILDREN_ANY_HOUSEHOLD_2024
+)
 
 MAX_NEWTON_STEPS = 200
 TARGET_TOLERANCE = 1e-9
@@ -233,16 +239,24 @@ def relationship_moments(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     """Count the ACS household types from the survey's relationship codes.
 
     A married-couple household holds the householder's spouse, and an own child is
-    the householder's child by birth, marriage or adoption. Children in households
-    leave out householders and spouses, as table B09005 does.
+    the householder's never-married child under 18 by birth, marriage or adoption.
+    Children in households leave out householders and spouses, as table B09005
+    does. B09005 also leaves out unmarried partners, whom code 13 lumps with
+    roommates, so the count keeps them; the 2024 ASEC's partner pointer names no
+    one under 18 as a partner.
+
+    The last moment measures how far the household's children sit from the ACS
+    share in married-couple households, so a target of zero holds that share over
+    the same children B09005 counts.
     """
-    if "person.cps_relationship" not in run:
+    if "person.cps_relationship" not in run or "person.cps_marital_status" not in run:
         raise ValueError("the run has no relationship codes: run relationship.py")
     household_ids = run["household.household_id"]
     person_household = household_position(
         household_ids, run["person.person_household_id"]
     )
     code = run["person.cps_relationship"]
+    never_married = run["person.cps_marital_status"] == NEVER_MARRIED
     young = run["person.age"] < 18
 
     def per_household(values: np.ndarray) -> np.ndarray:
@@ -251,7 +265,7 @@ def relationship_moments(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         )
 
     married = per_household(np.isin(code, SPOUSE_CODES)) > 0
-    own_child = per_household(young & (code == OWN_CHILD_CODE)) > 0
+    own_child = per_household(young & never_married & (code == OWN_CHILD_CODE)) > 0
     children = per_household(
         young & ~np.isin(code, REFERENCE_PERSON_CODES + SPOUSE_CODES)
     )
@@ -260,6 +274,8 @@ def relationship_moments(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         "married_couple_households_with_own_child": (married & own_child).astype(float),
         "children_in_households": children,
         "children_in_married_couple_households": children * married,
+        "children_in_married_couple_households_above_acs_share": children
+        * (married - ACS_SHARE_OF_CHILDREN_IN_MARRIED_COUPLE_HOUSEHOLDS),
     }
 
 
@@ -283,7 +299,6 @@ def published_targets(
 ) -> dict[str, float]:
     """The published counts, with the totals this experiment holds fixed."""
     held = ("people", "people_65_and_over", "adjusted_gross_income", "income_tax")
-    share_married = CHILDREN_MARRIED_HOUSEHOLD_2024 / CHILDREN_ANY_HOUSEHOLD_2024
     # The income bands add to the family total, so the total leaves the solve.
     extra = (
         {
@@ -321,10 +336,8 @@ def published_targets(
             else {}
         ),
         # The ACS and population estimates give different child totals, so the
-        # target takes the ACS share of the population estimate's total.
-        "children_in_married_couple_households": (
-            share_married * CHILDREN_UNDER_18_2024
-        ),
+        # target holds the ACS share rather than its count.
+        "children_in_married_couple_households_above_acs_share": 0.0,
     }
 
 
@@ -334,9 +347,13 @@ def entropy_balance(
     """Return factors nearest one, in relative entropy, that hit every target.
 
     The dual is smooth and convex, so damped Newton steps reach the unique
-    solution when the targets lie inside what the records can reach.
+    solution when the targets lie inside what the records can reach. A target of
+    zero takes its scale from the moment's absolute values at the starting
+    weights, so its tolerance stays relative too.
     """
     scale = np.abs(targets)
+    zero = scale == 0
+    scale[zero] = np.abs(moments[zero]) @ weights
     scale[scale == 0] = 1.0
     scaled_moments = moments / scale[:, None]
     scaled_targets = targets / scale
@@ -393,17 +410,24 @@ def load_factors(path: Path) -> tuple[np.ndarray, np.ndarray]:
 
 
 def load_filing_run(work: Path) -> dict[str, np.ndarray]:
-    """A file's 2024 run, with the relationship codes if relationship.py saved them."""
+    """A file's 2024 run, with the relationship codes if relationship.py saved them.
+
+    The codes must come from the run's own dataset and list the run's people by id.
+    """
     with np.load(work / "filing_2024.npz") as saved:
         run = {name: saved[name] for name in saved.files}
     codes = work / "relationship_2024.npz"
     if codes.exists():
+        bundle = json.loads((work / "filing_2024.json").read_text())["bundle"]
         with np.load(codes) as saved:
-            if not np.array_equal(
-                saved["person.person_household_id"], run["person.person_household_id"]
+            if str(saved["dataset_sha256"]) != bundle["runtime_dataset_sha256"]:
+                raise ValueError(f"{codes} comes from another dataset than the run")
+            if "person.person_id" not in run or not np.array_equal(
+                saved["person.person_id"], run["person.person_id"]
             ):
                 raise ValueError(f"{codes} lists other people than the run")
-            run["person.cps_relationship"] = saved["person.cps_relationship"]
+            for name in ("person.cps_relationship", "person.cps_marital_status"):
+                run[name] = saved[name]
     return run
 
 

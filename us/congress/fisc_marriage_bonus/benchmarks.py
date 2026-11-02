@@ -231,7 +231,7 @@ def relationship_measures(run: dict[str, np.ndarray]) -> dict[str, float]:
             for label, _, _, _ in MARRIED_OWN_CHILD_FAMILIES_BY_INCOME
         ),
     )
-    if "person.cps_relationship" not in run:
+    if "person.cps_relationship" not in run or "person.cps_marital_status" not in run:
         return {f"{name}_by_relationship": np.nan for name in names}
     weight = run["household.household_weight"].astype(float)
     # The same household moments calibrate solves on, income bands included.

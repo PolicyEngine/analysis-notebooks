@@ -7,11 +7,12 @@
     uv run us/congress/fisc_marriage_bonus/relationship.py <work-dir>
 
 The current dataset keeps the 2024 ASEC's A_EXPRRP code, each person's relationship
-to the household's reference person, though the model reads none of it. The ACS
-counts married-couple households and own children by those relationships, so
+to the household's reference person, and A_MARITL, each person's marital status,
+though the model reads neither. The ACS counts married-couple households and own
+children by those relationships, and an own child has never married, so
 reweight.py takes its household targets from the codes. This reads the file named
 in <work-dir>/filing_2024.json, checks its sha256, checks that it lists the run's
-people in the run's order, and saves <work-dir>/relationship_2024.npz.
+people by id in the run's order, and saves <work-dir>/relationship_2024.npz.
 """
 
 from __future__ import annotations
@@ -26,6 +27,14 @@ import pandas as pd
 from huggingface_hub import hf_hub_download
 
 RELATIONSHIP_COLUMN = "A_EXPRRP"
+MARITAL_STATUS_COLUMN = "A_MARITL"
+COLUMNS = (
+    "person_id",
+    "person_household_id",
+    "age",
+    RELATIONSHIP_COLUMN,
+    MARITAL_STATUS_COLUMN,
+)
 
 
 def sha256(path: Path) -> str:
@@ -55,10 +64,12 @@ def relationship_codes(
     people: pd.DataFrame, run: dict[str, np.ndarray]
 ) -> dict[str, np.ndarray]:
     """The codes in the run's person order, or an error if the files disagree."""
+    if not np.array_equal(people["person_id"].to_numpy(), run["person.person_id"]):
+        raise ValueError("the dataset lists other people or another order")
     if not np.array_equal(
         people["person_household_id"].to_numpy(), run["person.person_household_id"]
     ):
-        raise ValueError("the dataset lists other households or another order")
+        raise ValueError("the dataset puts people in other households")
     if not np.array_equal(
         people["age"].to_numpy().astype(np.float32), run["person.age"]
     ):
@@ -66,9 +77,13 @@ def relationship_codes(
     code = people[RELATIONSHIP_COLUMN].to_numpy()
     if not np.all(np.isin(code, np.arange(1, 15))):
         raise ValueError(f"a {RELATIONSHIP_COLUMN} code falls outside 1 to 14")
+    marital_status = people[MARITAL_STATUS_COLUMN].to_numpy()
+    if not np.all(np.isin(marital_status, np.arange(1, 8))):
+        raise ValueError(f"a {MARITAL_STATUS_COLUMN} code falls outside 1 to 7")
     return {
-        "person.person_household_id": run["person.person_household_id"],
+        "person.person_id": run["person.person_id"],
         "person.cps_relationship": code.astype(np.int8),
+        "person.cps_marital_status": marital_status.astype(np.int8),
     }
 
 
@@ -80,9 +95,7 @@ if __name__ == "__main__":
     path = dataset_path(bundle)
     if sha256(path) != bundle["runtime_dataset_sha256"]:
         raise ValueError(f"{path} is not the run's dataset")
-    people = pd.read_hdf(
-        path, "person", columns=["person_household_id", "age", RELATIONSHIP_COLUMN]
-    )
+    people = pd.read_hdf(path, "person", columns=list(COLUMNS))
     with np.load(args.work / "filing_2024.npz") as saved:
         run = {name: saved[name] for name in saved.files}
     codes = relationship_codes(people, run)

@@ -12,6 +12,10 @@ reads both from the file named in <work-dir>/fisc_2026.json, checks its sha256,
 and sets them beside the 2026 runs. It writes results/filing_roles_2026.csv: the
 units the model files jointly and the file does not, the bonus they receive, and
 the units the file lists as joint and the model does not.
+
+The reverse line asks what the model would pay those units at its own base amounts
+and AGI, so it does not take back a base amount the model gives a person the file
+calls a spouse. The net is a diagnostic, not a corrected estimate.
 """
 
 from __future__ import annotations
@@ -40,6 +44,33 @@ def weighted_median(values: np.ndarray, weights: np.ndarray) -> float:
     return float(values[order][np.searchsorted(cumulative, 0.5)])
 
 
+def model_roles(people: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """The tax unit head and spouse policyengine-us 2.2.1 picks, in people's order.
+
+    is_tax_unit_head takes the oldest adult, and is_tax_unit_spouse the oldest
+    adult left, unless anyone in the unit has separated. Ties go to the person the
+    dataset lists first, as get_rank's sort keeps them.
+    """
+    adult = people["age"].to_numpy() >= 18
+    order = pd.DataFrame(
+        {
+            "unit": people["person_tax_unit_id"].to_numpy(),
+            "older_first": -people["age"].to_numpy(),
+            "row": np.arange(len(people)),
+        }
+    )[adult].sort_values(["unit", "older_first", "row"], kind="stable")
+    rank = np.full(len(people), -1)
+    rank[order["row"].to_numpy()] = order.groupby("unit").cumcount().to_numpy()
+    separated = (
+        people["is_separated"]
+        .astype(bool)
+        .groupby(people["person_tax_unit_id"])
+        .transform("any")
+        .to_numpy()
+    )
+    return rank == 0, (rank == 1) & ~separated
+
+
 def filing_roles(
     units: pd.DataFrame,
     people: pd.DataFrame,
@@ -58,14 +89,16 @@ def filing_roles(
     model_only = joint & ~np.isin(status, MARRIED_IN_FILE)
     file_only = ~joint & (status == "JOINT")
 
-    # The model takes the oldest adult other than the file's head as the spouse.
     unit_ids = fisc["tax_unit.tax_unit_id"]
-    candidates = people[
-        people["person_tax_unit_id"].isin(unit_ids[model_only])
-        & (people["tax_unit_role_input"] != "HEAD")
-        & (people["age"] >= 18)
-    ]
-    spouses = candidates.sort_values("age").groupby("person_tax_unit_id").tail(1)
+    _, spouse = model_roles(people)
+    spouses = people[spouse & people["person_tax_unit_id"].isin(unit_ids[model_only])]
+    spouse_age = pd.Series(
+        fisc["tax_unit.age_spouse"].astype(float), index=unit_ids
+    ).loc[spouses["person_tax_unit_id"]]
+    if spouses.shape[0] != model_only.sum() or not np.array_equal(
+        spouses["age"].to_numpy(dtype=float), spouse_age.to_numpy()
+    ):
+        raise ValueError("the spouses picked here differ from the run's")
 
     base = fisc[BASE].astype(float)
     income = fisc["tax_unit.adjusted_gross_income"].astype(float)
@@ -74,6 +107,7 @@ def filing_roles(
         base, every_unit_joint, income, STATUTORY_BONUS_RATE
     ) - closed_form_credit(base, every_unit_joint, income, 0.0)
     model_only_bonus = float(weight @ (bonus * model_only))
+    # Holds the model's base amounts and AGI, so it does not repair the roles.
     file_only_bonus = float(weight @ (bonus_if_joint * file_only))
     return {
         "joint_in_model_not_in_file_records": float(model_only.sum()),
@@ -107,7 +141,7 @@ if __name__ == "__main__":
     people = pd.read_hdf(
         path,
         "person",
-        columns=["person_tax_unit_id", "tax_unit_role_input", "A_MARITL", "age"],
+        columns=["person_tax_unit_id", "is_separated", "A_MARITL", "age"],
     )
 
     def load(scenario: str) -> dict[str, np.ndarray]:

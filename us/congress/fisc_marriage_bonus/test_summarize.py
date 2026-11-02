@@ -922,6 +922,11 @@ class TestWeightFactors:
             weight_factor_summary(work, {"set": factors})
 
 
+def growth(year):
+    """Each year's arrays differ, so a year checked against another year's fails."""
+    return 1 + 0.02 * (year - PRIMARY_YEAR)
+
+
 class TestReweightedDecade:
     @pytest.fixture
     def decade(self, reweighted_run, tmp_path):
@@ -929,13 +934,16 @@ class TestReweightedDecade:
         (work / f"fisc_{PRIMARY_YEAR}.json").write_text(json.dumps({"bundle": BUNDLE}))
         for scenario in ("fisc", "fisc_no_bonus"):
             arrays = load(work, scenario, PRIMARY_YEAR)
-            for year in (summarize.MIDDLE_YEAR, summarize.LAST_YEAR):
-                np.savez(work / f"{scenario}_{year}.npz", **arrays)
+            for year in summarize.YEARS[1:]:
+                grown = arrays | {
+                    name: arrays[name] * growth(year) for name in (CREDIT, INCOME_TAX)
+                }
+                np.savez(work / f"{scenario}_{year}.npz", **grown)
         folder = tmp_path / "decade"
         folder.mkdir()
 
-        def totals(scenario, scale=FACTOR):
-            run = load(work, scenario, PRIMARY_YEAR)
+        def totals(scenario, scale=FACTOR, year=PRIMARY_YEAR):
+            run = load(work, scenario, year)
             weight = run["tax_unit.tax_unit_weight"] * scale
             return {
                 "family_income_supplement_credit": float(run[CREDIT] @ weight),
@@ -948,8 +956,8 @@ class TestReweightedDecade:
                 "bundle": BUNDLE,
                 "factors_sha256": hashlib.sha256(factors.read_bytes()).hexdigest(),
                 "totals": {
-                    "fisc": totals("fisc"),
-                    "fisc_no_bonus": totals("fisc_no_bonus"),
+                    "fisc": totals("fisc", year=file_year),
+                    "fisc_no_bonus": totals("fisc_no_bonus", year=file_year),
                 },
             }
             (folder / f"decade_{file_year}.json").write_text(
@@ -964,20 +972,20 @@ class TestReweightedDecade:
         )
         return work, full, folder, factors, bonus, totals, save_year
 
-    @staticmethod
-    def current_bonus(bonus):
-        return pd.Series(bonus / FACTOR, index=summarize.YEARS)
-
     def table(self, decade):
-        work, full, folder, factors, bonus, *_ = decade
-        return reweighted_decade(folder, full, work, factors, self.current_bonus(bonus))
+        work, full, folder, factors, *_ = decade
+        return reweighted_decade(folder, full, work, factors)
 
     def test_the_window_sums_each_year_and_starts_at_the_full_run(self, decade):
         bonus = decade[4]
         table = self.table(decade)
+        window = sum(growth(year) for year in summarize.YEARS)
         assert table.loc[PRIMARY_YEAR, "bonus"] == pytest.approx(bonus)
-        assert table.loc["2026-2035", "bonus"] == pytest.approx(10 * bonus)
-        assert table.loc["2026-2035", "income_tax_change"] == pytest.approx(-10 * bonus)
+        assert table.loc[2031, "bonus"] == pytest.approx(growth(2031) * bonus)
+        assert table.loc["2026-2035", "bonus"] == pytest.approx(window * bonus)
+        assert table.loc["2026-2035", "income_tax_change"] == pytest.approx(
+            -window * bonus
+        )
 
     def test_a_first_year_off_the_full_run_raises(self, decade):
         full = decade[1]
@@ -988,10 +996,14 @@ class TestReweightedDecade:
             self.table(decade)
 
     def test_income_tax_that_misses_the_credit_raises(self, decade):
-        *_, totals, save_year = decade
-        fisc = totals("fisc")
-        fisc["income_tax"] += 0.1 * decade[4]
-        save_year(2030, totals={"fisc": fisc, "fisc_no_bonus": totals("fisc_no_bonus")})
+        work, *_, save_year = decade
+        # The current run's own 2030 arrays move income tax without the credit, and
+        # the decade record matches them.
+        run = load(work, "fisc", 2030)
+        weight = run["tax_unit.tax_unit_weight"] * FACTOR
+        run[INCOME_TAX] = run[INCOME_TAX] + 0.1 * decade[4] / weight.sum()
+        np.savez(work / "fisc_2030.npz", **run)
+        save_year(2030)
         with pytest.raises(AssertionError, match="income tax disagree"):
             self.table(decade)
 
@@ -1006,53 +1018,57 @@ class TestReweightedDecade:
             self.table(decade)
 
     @pytest.mark.parametrize("scale", [1.0, 1.25, 0.0])
-    @pytest.mark.parametrize(
-        ("year", "message"),
-        [
-            (2028, "strays from"),
-            (2033, "strays from"),
-            (2031, "misses the current run"),
-            (2035, "misses the current run"),
-        ],
-    )
-    def test_a_year_at_other_weights_raises(self, decade, scale, year, message):
+    @pytest.mark.parametrize("year", [2028, 2031, 2033, 2035])
+    def test_a_year_at_other_weights_raises(self, decade, scale, year):
         *_, totals, save_year = decade
         save_year(
             year,
             totals={
-                "fisc": totals("fisc", scale),
-                "fisc_no_bonus": totals("fisc_no_bonus", scale),
+                "fisc": totals("fisc", scale, year),
+                "fisc_no_bonus": totals("fisc_no_bonus", scale, year),
             },
         )
-        with pytest.raises(AssertionError, match=message):
+        with pytest.raises(AssertionError, match="misses the current run"):
             self.table(decade)
 
-    @pytest.mark.parametrize(
-        ("year", "message"),
-        [(2033, "strays from"), (2035, "misses the current run")],
-    )
-    def test_a_year_with_its_two_runs_swapped_raises(self, decade, year, message):
+    @pytest.mark.parametrize("year", [2033, 2035])
+    def test_a_year_with_its_two_runs_swapped_raises(self, decade, year):
         *_, totals, save_year = decade
         save_year(
             year,
             totals={
-                "fisc": totals("fisc_no_bonus"),
-                "fisc_no_bonus": totals("fisc"),
+                "fisc": totals("fisc_no_bonus", year=year),
+                "fisc_no_bonus": totals("fisc", year=year),
             },
         )
-        with pytest.raises(AssertionError, match=message):
+        with pytest.raises(AssertionError, match="misses the current run"):
             self.table(decade)
 
-    def test_a_year_a_little_past_the_margin_raises(self, decade):
-        save_year = decade[-1]
-        run_fisc = decade[5]("fisc")
-        run_fisc["family_income_supplement_credit"] += 0.01 * decade[4]
-        run_fisc["income_tax"] -= 0.01 * decade[4]
+    def test_a_year_that_holds_the_year_before_raises(self, decade):
+        *_, totals, save_year = decade
         save_year(
-            2033,
-            totals={"fisc": run_fisc, "fisc_no_bonus": decade[5]("fisc_no_bonus")},
+            2030,
+            totals={
+                "fisc": totals("fisc", year=2029),
+                "fisc_no_bonus": totals("fisc_no_bonus", year=2029),
+            },
         )
-        with pytest.raises(AssertionError, match="strays from"):
+        with pytest.raises(AssertionError, match="misses the current run"):
+            self.table(decade)
+
+    def test_a_middle_year_four_tenths_of_a_percent_off_raises(self, decade):
+        *_, totals, save_year = decade
+        save_year(
+            2030,
+            totals={
+                scenario: {
+                    name: 1.004 * value
+                    for name, value in totals(scenario, year=2030).items()
+                }
+                for scenario in ("fisc", "fisc_no_bonus")
+            },
+        )
+        with pytest.raises(AssertionError, match="misses the current run"):
             self.table(decade)
 
     def test_factors_for_other_households_raise(self, decade):
@@ -1065,8 +1081,8 @@ class TestReweightedDecade:
 
     @pytest.mark.parametrize("recorded", ["0" * 64, None])
     def test_a_year_run_on_other_factors_raises(self, decade, recorded):
-        # Another set's factors can give a ratio inside the margin, so only the
-        # file's hash tells the years apart.
+        # Another set's factors can give totals near this set's, so the file's
+        # hash tells the years apart.
         decade[-1](2031, factors_sha256=recorded)
         with pytest.raises(AssertionError, match="other factors"):
             self.table(decade)
@@ -1081,18 +1097,22 @@ class TestReweightedDecade:
         with pytest.raises(ValueError, match="finite and positive"):
             self.table(decade)
 
-    def test_an_end_year_bonus_off_by_under_one_percent_raises(self, decade):
+    @pytest.mark.parametrize("year", [2030, 2035])
+    def test_a_bonus_off_by_under_one_percent_raises(self, decade, year):
         # Moving the credit and income tax together leaves each scenario's
         # totals inside the tolerance while the bonus moves 0.8%.
         *_, totals, save_year = decade
-        fisc = totals("fisc")
-        shift = 0.008 * decade[4]
+        fisc = totals("fisc", year=year)
+        shift = 0.008 * decade[4] * growth(year)
         assert shift < summarize.RELATIVE_TOLERANCE * min(
             abs(fisc["family_income_supplement_credit"]), abs(fisc["income_tax"])
         )
         fisc["family_income_supplement_credit"] += shift
         fisc["income_tax"] -= shift
-        save_year(2035, totals={"fisc": fisc, "fisc_no_bonus": totals("fisc_no_bonus")})
+        save_year(
+            year,
+            totals={"fisc": fisc, "fisc_no_bonus": totals("fisc_no_bonus", year=year)},
+        )
         with pytest.raises(AssertionError, match="bonus misses"):
             self.table(decade)
 
@@ -1103,23 +1123,22 @@ class TestReweightedDecade:
             {"one": full, "two": full},
             work,
             {"one": factors, "two": factors},
-            self.current_bonus(bonus),
         )
         assert set(table.weights) == {"one", "two"}
         assert (table.year == "2026-2035").sum() == 2
         assert table.year.map(type).eq(str).all()
         summed = table[(table.weights == "two") & (table.year == "2026-2035")]
-        assert summed.bonus.item() == pytest.approx(10 * bonus)
+        window = sum(growth(year) for year in summarize.YEARS)
+        assert summed.bonus.item() == pytest.approx(window * bonus)
 
     def test_a_label_with_no_weights_raises(self, decade):
-        work, full, folder, factors, bonus, *_ = decade
+        work, full, folder, factors, *_ = decade
         with pytest.raises(KeyError):
             summarize.reweighted_decades(
                 {"one": folder},
                 {"two": full},
                 work,
                 {"one": factors},
-                self.current_bonus(bonus),
             )
 
     def test_a_missing_year_raises(self, decade):
@@ -1194,6 +1213,10 @@ class TestBonusReach:
     def test_only_units_the_bonus_pays_count_as_receiving(self, runs):
         work, _ = runs
         table = bonus_reach(work)
+        # Fifteen joint units of weight 1,000 hold a child, and the three at
+        # $400,000 lose the bonus to the phase-out.
+        assert table.joint_units_with_a_child.sum() == 15_000
+        assert table.units_receiving_the_bonus.sum() == 12_000
         assert (table.units_receiving_the_bonus <= table.joint_units_with_a_child).all()
         assert ((table.bonus > 0) <= (table.units_receiving_the_bonus > 0)).all()
 

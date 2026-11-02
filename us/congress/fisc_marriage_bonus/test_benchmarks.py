@@ -6,6 +6,7 @@ results/.
 
 from __future__ import annotations
 
+import json
 from itertools import pairwise
 
 import numpy as np
@@ -41,8 +42,10 @@ def small_run() -> dict[str, np.ndarray]:
         "person.is_household_head": np.array([1, 0, 0, 0, 1, 0], dtype=bool),
         "person.is_tax_unit_dependent": np.array([0, 0, 1, 0, 0, 1], dtype=bool),
         "tax_unit.income_tax": np.array([9_000.0, 0.0, 500.0]),
+        "person.person_id": np.array([1, 2, 3, 4, 5, 6]),
         # Householder, wife, own child, lodger; householder, own child.
         "person.cps_relationship": np.array([1, 4, 5, 14, 1, 5]),
+        "person.cps_marital_status": np.array([1, 1, 7, 7, 5, 7]),
     }
 
 
@@ -200,9 +203,12 @@ def test_the_relationship_rows_read_the_survey_codes():
     assert result["married_own_child_income_under_25000_by_relationship"] == 0
 
 
-def test_a_file_without_codes_leaves_the_relationship_rows_blank():
+@pytest.mark.parametrize(
+    "name", ["person.cps_relationship", "person.cps_marital_status"]
+)
+def test_a_file_without_codes_leaves_the_relationship_rows_blank(name):
     plain = small_run()
-    del plain["person.cps_relationship"]
+    del plain[name]
     table = benchmark_table({"plain": plain, "coded": small_run()})
     rows = table[table["measure"].str.endswith("_by_relationship")]
     assert len(rows) == 4 + len(MARRIED_OWN_CHILD_FAMILIES_BY_INCOME)
@@ -235,12 +241,18 @@ def test_household_factors_reach_the_tax_units_inside_each_household():
 def test_a_file_spec_can_carry_factors(tmp_path):
     arrays = small_run()
     codes = arrays.pop("person.cps_relationship")
+    marital_status = arrays.pop("person.cps_marital_status")
     np.savez(tmp_path / "filing_2024.npz", **arrays)
+    (tmp_path / "filing_2024.json").write_text(
+        json.dumps({"bundle": {"runtime_dataset_sha256": "ab" * 32}})
+    )
     np.savez(
         tmp_path / "relationship_2024.npz",
+        dataset_sha256="ab" * 32,
         **{
-            "person.person_household_id": arrays["person.person_household_id"],
+            "person.person_id": arrays["person.person_id"],
             "person.cps_relationship": codes,
+            "person.cps_marital_status": marital_status,
         },
     )
     np.savez(

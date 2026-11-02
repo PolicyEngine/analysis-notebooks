@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-from filing_roles import filing_roles
+from filing_roles import filing_roles, model_roles
 
 
 def units() -> pd.DataFrame:
@@ -27,15 +27,7 @@ def people() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "person_tax_unit_id": [1, 1, 2, 2, 2, 3, 3],
-            "tax_unit_role_input": [
-                "HEAD",
-                "SPOUSE",
-                "HEAD",
-                "DEPENDENT",
-                "DEPENDENT",
-                "HEAD",
-                "SPOUSE",
-            ],
+            "is_separated": [False] * 7,
             "A_MARITL": [1, 1, 5, 7, 7, 1, 1],
             "age": [40.0, 38.0, 45.0, 22.0, 6.0, 50.0, 49.0],
         }
@@ -81,3 +73,48 @@ def test_a_joint_return_the_model_splits_counts_the_other_way():
 def test_units_in_another_order_raise():
     with pytest.raises(ValueError, match="another order"):
         filing_roles(units().iloc[::-1], people(), *runs())
+
+
+def test_the_spouse_must_match_the_runs_spouse_age():
+    fisc, no_bonus = runs()
+    fisc["tax_unit.age_spouse"] = np.array([38.0, 45.0, 0.0])
+    with pytest.raises(ValueError, match="differ from the run's"):
+        filing_roles(units(), people(), fisc, no_bonus)
+
+
+def test_the_model_takes_the_oldest_adults_and_breaks_ties_by_listing():
+    table = pd.DataFrame(
+        {
+            "person_tax_unit_id": [5, 5, 5, 6, 6],
+            "is_separated": [False] * 5,
+            "age": [30.0, 17.0, 30.0, 25.0, 60.0],
+        }
+    )
+    head, spouse = model_roles(table)
+    assert head.tolist() == [True, False, False, False, True]
+    assert spouse.tolist() == [False, False, True, True, False]
+
+
+def test_a_separated_member_leaves_the_unit_without_a_spouse():
+    table = pd.DataFrame(
+        {
+            "person_tax_unit_id": [5, 5, 5],
+            "is_separated": [False, True, False],
+            "age": [50.0, 45.0, 10.0],
+        }
+    )
+    head, spouse = model_roles(table)
+    assert head.tolist() == [True, False, False]
+    assert not spouse.any()
+
+
+def test_a_unit_of_children_has_no_head():
+    table = pd.DataFrame(
+        {
+            "person_tax_unit_id": [5, 5],
+            "is_separated": [False, False],
+            "age": [17.0, 9.0],
+        }
+    )
+    head, spouse = model_roles(table)
+    assert not head.any() and not spouse.any()

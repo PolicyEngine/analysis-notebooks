@@ -6,16 +6,18 @@ results/.
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from reweight import (
+    ACS_SHARE_OF_CHILDREN_IN_MARRIED_COUPLE_HOUSEHOLDS,
     ALL_RETURNS_2023,
     CHILD_CREDIT_2023,
     CHILDREN_ANY_HOUSEHOLD_2024,
     CHILDREN_MARRIED_HOUSEHOLD_2024,
-    CHILDREN_UNDER_18_2024,
     HEAD_OF_HOUSEHOLD_RETURNS_2023,
     MARRIED_OWN_CHILD_FAMILIES_BY_INCOME,
     MARRIED_RETURNS_BY_AGI,
@@ -48,8 +50,11 @@ def small_run() -> dict[str, np.ndarray]:
         "person.age": np.array([40, 38, 4, 30, 12, 70]),
         "person.is_household_head": np.array([1, 0, 0, 1, 0, 1], dtype=bool),
         "person.is_tax_unit_dependent": np.array([0, 0, 1, 0, 1, 0], dtype=bool),
+        "person.person_id": np.array([101, 102, 103, 104, 105, 106]),
         # Householder, wife, own child; householder, own child; householder alone.
         "person.cps_relationship": np.array([1, 4, 5, 1, 5, 2]),
+        # Married, married, never married; divorced, never married; widowed.
+        "person.cps_marital_status": np.array([1, 1, 7, 5, 7, 4]),
     }
 
 
@@ -165,9 +170,38 @@ def test_a_householder_or_spouse_under_18_is_not_counted_among_children():
     assert moments["children_in_married_couple_households"].tolist() == [0, 1, 0]
 
 
-def test_a_run_without_relationship_codes_cannot_calibrate():
+def test_an_ever_married_child_counts_among_children_but_is_no_own_child():
     run = small_run()
-    del run["person.cps_relationship"]
+    # The ACS counts only never-married children as own children; 6 is separated.
+    run["person.cps_marital_status"] = np.array([1, 1, 6, 5, 7, 4])
+    moments = relationship_moments(run)
+    assert moments["married_couple_households"].tolist() == [0, 1, 0]
+    assert moments["married_couple_households_with_own_child"].tolist() == [0, 0, 0]
+    assert moments["children_in_married_couple_households"].tolist() == [0, 1, 0]
+
+
+def test_the_share_moment_is_zero_where_the_acs_share_holds():
+    moments = relationship_moments(small_run())
+    share = ACS_SHARE_OF_CHILDREN_IN_MARRIED_COUPLE_HOUSEHOLDS
+    assert moments["children_in_married_couple_households_above_acs_share"] == (
+        pytest.approx([0, 1 - share, -share])
+    )
+    # Weights that put the ACS share of these children in the married household.
+    weights = np.array([1.0, share, 1 - share])
+    assert moments["children_in_married_couple_households_above_acs_share"] @ (
+        weights
+    ) == pytest.approx(0, abs=1e-15)
+    married = moments["children_in_married_couple_households"] @ weights
+    children = moments["children_in_households"] @ weights
+    assert married / children == pytest.approx(share)
+
+
+@pytest.mark.parametrize(
+    "name", ["person.cps_relationship", "person.cps_marital_status"]
+)
+def test_a_run_without_relationship_codes_cannot_calibrate(name):
+    run = small_run()
+    del run[name]
     with pytest.raises(ValueError, match="relationship.py"):
         calibrate(run)
 
@@ -192,34 +226,63 @@ def test_the_solve_counts_households_by_the_codes_and_returns_by_filing(
     assert row["joint_returns_with_child_credit"].tolist() == [0, 0, 0]
 
 
+DATASET_SHA256 = "ab" * 32
+CODE_NAMES = ("person.cps_relationship", "person.cps_marital_status")
+
+
+def save_run_and_codes(work, person_ids=None, dataset_sha256=DATASET_SHA256):
+    """Save small_run without its codes, then the codes as relationship.py does."""
+    arrays = small_run()
+    codes = {name: arrays.pop(name) for name in CODE_NAMES}
+    np.savez(work / "filing_2024.npz", **arrays)
+    (work / "filing_2024.json").write_text(
+        json.dumps({"bundle": {"runtime_dataset_sha256": DATASET_SHA256}})
+    )
+    np.savez(
+        work / "relationship_2024.npz",
+        dataset_sha256=dataset_sha256,
+        **{
+            "person.person_id": (
+                arrays["person.person_id"] if person_ids is None else person_ids
+            )
+        },
+        **codes,
+    )
+    return codes
+
+
 def test_a_run_picks_up_the_codes_saved_beside_it(tmp_path):
     arrays = small_run()
-    codes = arrays.pop("person.cps_relationship")
+    for name in CODE_NAMES:
+        arrays.pop(name)
     np.savez(tmp_path / "filing_2024.npz", **arrays)
     assert "person.cps_relationship" not in load_filing_run(tmp_path)
-    np.savez(
-        tmp_path / "relationship_2024.npz",
-        **{
-            "person.person_household_id": arrays["person.person_household_id"],
-            "person.cps_relationship": codes,
-        },
-    )
-    assert load_filing_run(tmp_path)["person.cps_relationship"].tolist() == (
-        codes.tolist()
-    )
+    codes = save_run_and_codes(tmp_path)
+    run = load_filing_run(tmp_path)
+    for name in CODE_NAMES:
+        assert run[name].tolist() == codes[name].tolist()
 
 
 def test_codes_saved_for_other_people_raise(tmp_path):
-    arrays = small_run()
-    codes = arrays.pop("person.cps_relationship")
+    # Swapping two people of one household and one age passes every other check.
+    save_run_and_codes(tmp_path, person_ids=np.array([102, 101, 103, 104, 105, 106]))
+    with pytest.raises(ValueError, match="other people"):
+        load_filing_run(tmp_path)
+
+
+def test_codes_from_another_dataset_raise(tmp_path):
+    save_run_and_codes(tmp_path, dataset_sha256="cd" * 32)
+    with pytest.raises(ValueError, match="another dataset"):
+        load_filing_run(tmp_path)
+
+
+def test_a_run_without_person_ids_cannot_take_codes(tmp_path):
+    save_run_and_codes(tmp_path)
+    with np.load(tmp_path / "filing_2024.npz") as saved:
+        arrays = {
+            name: saved[name] for name in saved.files if name != "person.person_id"
+        }
     np.savez(tmp_path / "filing_2024.npz", **arrays)
-    np.savez(
-        tmp_path / "relationship_2024.npz",
-        **{
-            "person.person_household_id": arrays["person.person_household_id"][::-1],
-            "person.cps_relationship": codes,
-        },
-    )
     with pytest.raises(ValueError, match="other people"):
         load_filing_run(tmp_path)
 
@@ -344,15 +407,13 @@ def test_every_solve_holds_the_files_people_income_and_tax():
     assert targets["income_tax"] == moments["income_tax"] @ weights
 
 
-def test_the_married_child_target_takes_the_acs_share_of_the_population_total():
+def test_the_married_child_target_holds_the_acs_share_not_its_count():
     moments = household_moments(small_run())
     targets = published_targets(moments, np.array([2.0, 3.0, 4.0]))
-    share = CHILDREN_MARRIED_HOUSEHOLD_2024 / CHILDREN_ANY_HOUSEHOLD_2024
-    assert targets["children_in_married_couple_households"] == pytest.approx(
-        share * CHILDREN_UNDER_18_2024
-    )
-    assert targets["children_in_married_couple_households"] != (
-        CHILDREN_MARRIED_HOUSEHOLD_2024
+    assert targets["children_in_married_couple_households_above_acs_share"] == 0
+    assert "children_in_married_couple_households" not in targets
+    assert ACS_SHARE_OF_CHILDREN_IN_MARRIED_COUPLE_HOUSEHOLDS == (
+        CHILDREN_MARRIED_HOUSEHOLD_2024 / CHILDREN_ANY_HOUSEHOLD_2024
     )
 
 
@@ -393,6 +454,9 @@ def many_households(size: int = 3000) -> dict[str, np.ndarray]:
     code[head] = 1
     code[spouses] = 3
     code[last[other_adult]] = 12
+    marital_status = np.full(people.sum(), 7)
+    marital_status[head[married]] = 1
+    marital_status[spouses] = 1
     return {
         "household.household_id": np.arange(size),
         "household.household_weight": generator.uniform(1.5e4, 4.5e4, size),
@@ -408,13 +472,21 @@ def many_households(size: int = 3000) -> dict[str, np.ndarray]:
         "person.is_household_head": is_head,
         "person.is_tax_unit_dependent": ~adult,
         "person.cps_relationship": code,
+        "person.cps_marital_status": marital_status,
     }
 
 
 def test_a_detailed_solve_hits_every_target_on_many_records():
-    result = calibrate(many_households(), detailed=True)
+    run = many_households()
+    result = calibrate(run, detailed=True)
     for name, target in result.targets.items():
-        assert result.after[name] == pytest.approx(target, rel=1e-6)
+        if target:
+            assert result.after[name] == pytest.approx(target, rel=1e-6)
+    moments = relationship_moments(run)
+    weights = run["household.household_weight"] * result.factors
+    assert moments["children_in_married_couple_households"] @ weights / (
+        moments["children_in_households"] @ weights
+    ) == pytest.approx(ACS_SHARE_OF_CHILDREN_IN_MARRIED_COUPLE_HOUSEHOLDS, rel=1e-9)
     assert (result.factors > 0).all()
 
 
@@ -512,6 +584,24 @@ def test_balancing_hits_the_targets_and_leaves_a_met_target_alone():
     factors = entropy_balance(weights, moments, targets)
     assert np.allclose(moments @ (weights * factors), targets)
     assert (factors > 0).all()
+
+
+def test_a_zero_target_is_met_relative_to_its_own_scale():
+    """A share held as a zero-sum moment, with totals so large that a gap of 1e-9
+    children sits below rounding."""
+    generator = np.random.default_rng(5)
+    weights = generator.uniform(1e6, 5e6, 20_000)
+    married = generator.random(20_000) < 0.5
+    children = generator.integers(0, 4, 20_000).astype(float)
+    share = 0.67
+    moments = np.vstack([np.ones(20_000), children * (married - share)])
+    targets = np.array([weights.sum(), 0.0])
+    factors = entropy_balance(weights, moments, targets)
+    reweighted = weights * factors
+    assert reweighted @ (children * married) / (reweighted @ children) == (
+        pytest.approx(share, rel=1e-9)
+    )
+    assert reweighted.sum() == pytest.approx(weights.sum(), rel=1e-9)
 
 
 def test_balancing_refuses_targets_no_positive_weights_can_reach():

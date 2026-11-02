@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from itertools import pairwise
 from pathlib import Path
 
 import numpy as np
@@ -78,10 +77,6 @@ CAREGIVER_AGE = 18
 PRIMARY_YEAR = 2026
 LAST_YEAR = 2035
 CHECK_YEARS = (PRIMARY_YEAR, LAST_YEAR)
-# The current run also saved arrays for a middle year, so each reweighted decade
-# checks three years against those arrays and the years between against them.
-MIDDLE_YEAR = 2031
-ARRAY_YEARS = (PRIMARY_YEAR, MIDDLE_YEAR, LAST_YEAR)
 CREDIT = "tax_unit.family_income_supplement_credit"
 BASE = "tax_unit.family_income_supplement_credit_base_amount"
 HOUSEHOLD_CREDIT = "household.family_income_supplement_credit"
@@ -99,9 +94,6 @@ MOVED_BY_WEIGHTS = {
 # Saved weights carry single precision, so a ratio of two of them misses by a few
 # parts in ten million.
 WEIGHT_RATIO_TOLERANCE = 1e-6
-# A set's bonus over the current bonus drifts smoothly across the window. The real
-# runs stray at most 0.0016 past the 2026 and 2035 ratios.
-YEAR_RATIO_MARGIN = 0.005
 # Census Bureau, America's Families and Living Arrangements: 2023, in thousands.
 # Table C3: https://www2.census.gov/programs-surveys/demo/tables/families/2023/cps-2023/tabc3-all.xls
 # Table FG3, opposite-sex couples: https://www2.census.gov/programs-surveys/demo/tables/families/2023/cps-2023/tabfg3-all.xls
@@ -785,7 +777,7 @@ def check_against_api(work: Path) -> dict:
     results: dict[str, object] = {}
 
     direct = api_result(FISC, NO_BONUS, PRIMARY_YEAR)
-    for year in ARRAY_YEARS:
+    for year in YEARS:
         results |= bonus_gap_from_api(work, year)
 
     comparisons = {
@@ -1465,37 +1457,17 @@ def check_arrays_behind_the_decade(
             raise AssertionError(f"{year}: the bonus misses the current run's arrays")
 
 
-def check_years_between(table: pd.DataFrame, current_bonus: pd.Series) -> None:
-    """Years with no saved arrays must hold this set's ratio to the current bonus.
-
-    Each year must sit within the margin of the range its two nearest checked years
-    span.
-    """
-    ratio = table["bonus"] / current_bonus.loc[list(YEARS)]
-    for start, end in pairwise(ARRAY_YEARS):
-        ends = ratio.loc[[start, end]]
-        between = ratio.loc[[year for year in YEARS if start <= year <= end]]
-        if (
-            between.min() < ends.min() - YEAR_RATIO_MARGIN
-            or between.max() > ends.max() + YEAR_RATIO_MARGIN
-        ):
-            raise AssertionError("a year strays from the current run at these weights")
-
-
 def reweighted_decade(
     folder: Path,
     full_year: Path,
     work: Path,
     factors: Path,
-    current_bonus: pd.Series,
 ) -> pd.DataFrame:
     """Each year's bonus on one set of weights, from decade.py's two runs a year.
 
-    Every year must record the sha256 of this set's factor file. The current run
-    saved arrays for 2026, 2031 and 2035, so those years must match them at these
-    factors, bonus included. The other years must hold the set's ratio to the
-    current bonus, which catches a year run on another reform or with the wrong
-    weights unless its ratio lands within the margin.
+    Every year must record the sha256 of this set's factor file, and the current
+    run saved arrays for every year, so each year must match them at these factors,
+    bonus included.
     """
     bundle = json.loads((work / f"fisc_{PRIMARY_YEAR}.json").read_text())["bundle"]
     saved = read_factors(factors)
@@ -1510,8 +1482,7 @@ def reweighted_decade(
             raise AssertionError(f"{year}: the decade run used other factors")
         totals = decade_year["totals"]
         fisc, no_bonus = totals["fisc"], totals["fisc_no_bonus"]
-        if year in ARRAY_YEARS:
-            check_arrays_behind_the_decade(year, totals, work, saved)
+        check_arrays_behind_the_decade(year, totals, work, saved)
         bonus = (
             fisc["family_income_supplement_credit"]
             - no_bonus["family_income_supplement_credit"]
@@ -1542,7 +1513,6 @@ def reweighted_decade(
     gap = abs(table.loc[PRIMARY_YEAR, "bonus"] - in_the_full_run)
     if gap > RELATIVE_TOLERANCE * in_the_full_run:
         raise AssertionError("the decade run and the full run disagree on 2026")
-    check_years_between(table, current_bonus)
     table.loc["2026-2035"] = table.sum()
     return table
 
@@ -1552,13 +1522,12 @@ def reweighted_decades(
     weights: dict[str, Path],
     work: Path,
     factors: dict[str, Path],
-    current_bonus: pd.Series,
 ) -> pd.DataFrame:
     """Each year's bonus on every set of weights that ran the whole window."""
     tables = [
-        reweighted_decade(
-            folder, weights[label], work, factors[label], current_bonus
-        ).assign(weights=label)
+        reweighted_decade(folder, weights[label], work, factors[label]).assign(
+            weights=label
+        )
         for label, folder in decades.items()
     ]
     return pd.concat(tables).rename_axis("year").reset_index().astype({"year": str})
@@ -1704,11 +1673,7 @@ def main(
         "data_comparison_2026": comparison,
         "reweighted_comparison_2026": reweighted_table,
         "reweighted_budget_by_year": reweighted_decades(
-            decades,
-            weights,
-            work,
-            factors,
-            -indexed["budget_by_year"]["bonus_income_tax"],
+            decades, weights, work, factors
         ),
         "deciles_by_weights_2026": deciles_by_weights(weights),
         "weight_factors": weight_factor_summary(work, factors),

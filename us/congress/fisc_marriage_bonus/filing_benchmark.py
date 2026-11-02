@@ -36,6 +36,7 @@ TAX_UNIT_VARIABLES = (
 # reports the credit after it, so the benchmark needs the liability as well.
 TAX_UNIT_CREDITS = ("ctc", "non_refundable_ctc", "refundable_ctc")
 PERSON_VARIABLES = (
+    "person_id",
     "person_tax_unit_id",
     "person_household_id",
     "age",

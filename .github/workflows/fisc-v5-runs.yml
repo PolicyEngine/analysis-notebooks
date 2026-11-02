@@ -13,13 +13,20 @@ jobs:
     timeout-minutes: 90
     strategy:
       fail-fast: false
-      max-parallel: 8
+      max-parallel: 10
       matrix:
-        include:
-          - { set: child_credit, ticket: fisc, os: ubuntu-24.04 }
-          - { set: child_credit, ticket: "2028", os: ubuntu-24.04 }
-          - { set: child_credit, ticket: fisc, os: ubuntu-24.04-arm }
-          - { set: child_credit, ticket: "2028", os: ubuntu-24.04-arm }
+        os: [ubuntu-24.04]
+        set: [child_credit, all_targets, household_counts, family_income]
+        ticket:
+          [baseline, fisc, fisc_no_bonus, "2026", "2027", "2028", "2029", "2030", "2031", "2032", "2033", "2034", "2035"]
+        # The Mac finished these before the Microcosm US release held heavy local work.
+        exclude:
+          - { set: child_credit, ticket: baseline }
+          - { set: child_credit, ticket: fisc }
+          - { set: child_credit, ticket: fisc_no_bonus }
+          - { set: child_credit, ticket: "2026" }
+          - { set: child_credit, ticket: "2027" }
+          - { set: child_credit, ticket: "2028" }
     defaults:
       run:
         working-directory: us/congress/fisc_marriage_bonus

@@ -475,45 +475,83 @@ class TestTablesAreFinite:
 
 
 class TestTheDecade:
-    def later(self, work, run):
-        np.savez(work / "fisc_2035.npz", **run)
-
-    def grown(self):
-        run = fake_run(0.2)
+    @staticmethod
+    def grown(rate, year):
+        run = fake_run(rate)
         for name in ("household.household_weight", "tax_unit.tax_unit_weight"):
-            run[name] = run[name] * 1.03
+            run[name] = run[name] * (1 + 0.003 * (year - PRIMARY_YEAR))
         return run
 
-    def test_families_as_they_stand_with_common_weight_growth_pass(self, runs):
+    @pytest.fixture
+    def decade(self, runs):
         work, _ = runs
-        self.later(work, self.grown())
-        assert check_the_decade(work)[
+        for year in summarize.YEARS[1:]:
+            self.save_year(work, year)
+        return work
+
+    def save_year(self, work, year, fisc=None, no_bonus=None):
+        np.savez(work / f"fisc_{year}.npz", **(fisc or self.grown(0.2, year)))
+        np.savez(
+            work / f"fisc_no_bonus_{year}.npz", **(no_bonus or self.grown(0.0, year))
+        )
+
+    def test_families_as_they_stand_with_common_weight_growth_pass(self, decade):
+        assert check_the_decade(decade)[
             "weight_growth_from_2026_to_2035"
-        ] == pytest.approx(1.03)
+        ] == pytest.approx(1.027)
 
-    def test_reordered_tax_units_fail(self, runs):
-        work, _ = runs
-        run = self.grown()
+    def test_a_missing_year_fails(self, decade):
+        (decade / "fisc_no_bonus_2030.npz").unlink()
+        with pytest.raises(FileNotFoundError):
+            check_the_decade(decade)
+
+    def test_reordered_tax_units_fail(self, decade):
+        run = self.grown(0.2, 2031)
         run["tax_unit.tax_unit_id"] = run["tax_unit.tax_unit_id"][::-1]
-        self.later(work, run)
-        with pytest.raises(AssertionError, match="changed tax_unit.tax_unit_id"):
-            check_the_decade(work)
+        self.save_year(decade, 2031, fisc=run)
+        with pytest.raises(
+            AssertionError, match="2031: .*changed tax_unit.tax_unit_id"
+        ):
+            check_the_decade(decade)
 
-    def test_a_family_that_changes_fails(self, runs):
-        work, _ = runs
-        run = self.grown()
+    def test_a_family_that_changes_without_the_bonus_fails(self, decade):
+        run = self.grown(0.0, 2029)
         run["tax_unit.joint"] = ~run["tax_unit.joint"]
-        self.later(work, run)
-        with pytest.raises(AssertionError, match="changed tax_unit.joint"):
-            check_the_decade(work)
+        self.save_year(decade, 2029, no_bonus=run)
+        with pytest.raises(AssertionError, match="2029: .*changed tax_unit.joint"):
+            check_the_decade(decade)
 
-    def test_uneven_weight_growth_fails(self, runs):
-        work, _ = runs
-        run = self.grown()
+    def test_uneven_weight_growth_fails(self, decade):
+        run = self.grown(0.2, 2030)
         run["household.household_weight"][0] *= 1.01
-        self.later(work, run)
-        with pytest.raises(AssertionError, match="unevenly"):
-            check_the_decade(work)
+        self.save_year(decade, 2030, fisc=run)
+        with pytest.raises(AssertionError, match="2030: .*unevenly"):
+            check_the_decade(decade)
+
+    def test_two_runs_on_different_weights_fail(self, decade):
+        run = self.grown(0.0, 2032)
+        run["tax_unit.tax_unit_weight"] = run["tax_unit.tax_unit_weight"] * 1.0001
+        self.save_year(decade, 2032, no_bonus=run)
+        with pytest.raises(AssertionError, match="2032: the two runs weigh"):
+            check_the_decade(decade)
+
+    def test_credit_moved_between_two_units_fails(self, decade):
+        # Review 12's mutation: the total and the API check stay put while two
+        # units' credits move against each other.
+        run = self.grown(0.2, 2031)
+        weight = run["tax_unit.tax_unit_weight"]
+        first, second = np.flatnonzero(run[CREDIT] > 0)[:2]
+        shift = np.zeros(N)
+        shift[first] = 1_000.0
+        shift[second] = -1_000.0 * weight[first] / weight[second]
+        run[CREDIT] = run[CREDIT] + shift
+        run[INCOME_TAX] = run[INCOME_TAX] - shift
+        assert (run[CREDIT] - self.grown(0.2, 2031)[CREDIT]) @ weight == (
+            pytest.approx(0, abs=1e-6)
+        )
+        self.save_year(decade, 2031, fisc=run)
+        with pytest.raises(AssertionError, match="2031: the credit differs"):
+            check_the_decade(decade)
 
 
 class TestComparisonFile:

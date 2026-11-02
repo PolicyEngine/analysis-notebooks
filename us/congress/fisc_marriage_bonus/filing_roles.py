@@ -90,15 +90,21 @@ def filing_roles(
     file_only = ~joint & (status == "JOINT")
 
     unit_ids = fisc["tax_unit.tax_unit_id"]
-    _, spouse = model_roles(people)
+    head, spouse = model_roles(people)
+    age = people["age"].to_numpy(dtype=float)
+    for role, picked in (("head", head), ("spouse", spouse)):
+        ages = (
+            pd.Series(age * picked)
+            .groupby(people["person_tax_unit_id"].to_numpy())
+            .sum()
+            .reindex(unit_ids, fill_value=0.0)
+            .to_numpy()
+        )
+        if not np.array_equal(ages, fisc[f"tax_unit.age_{role}"].astype(float)):
+            raise ValueError(f"the {role}s picked here differ from the run's")
     spouses = people[spouse & people["person_tax_unit_id"].isin(unit_ids[model_only])]
-    spouse_age = pd.Series(
-        fisc["tax_unit.age_spouse"].astype(float), index=unit_ids
-    ).loc[spouses["person_tax_unit_id"]]
-    if spouses.shape[0] != model_only.sum() or not np.array_equal(
-        spouses["age"].to_numpy(dtype=float), spouse_age.to_numpy()
-    ):
-        raise ValueError("the spouses picked here differ from the run's")
+    if spouses.shape[0] != model_only.sum():
+        raise ValueError("a unit the model files jointly has no spouse here")
 
     base = fisc[BASE].astype(float)
     income = fisc["tax_unit.adjusted_gross_income"].astype(float)

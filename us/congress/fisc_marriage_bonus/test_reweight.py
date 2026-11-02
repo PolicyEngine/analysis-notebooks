@@ -604,6 +604,24 @@ def test_a_zero_target_is_met_relative_to_its_own_scale():
     assert reweighted.sum() == pytest.approx(weights.sum(), rel=1e-9)
 
 
+def test_a_zero_target_is_met_at_the_final_weights_after_a_large_cut():
+    """Review 12's counterexample: the starting weights shrink a billionfold, so a
+    miss measured against their total would let a residual near one through."""
+    weights = np.array([1e9, 2e9])
+    moments = np.array([[1.0, 1.0], [1.0, -1.0]])
+    reweighted = weights * entropy_balance(weights, moments, np.array([3.0, 0.0]))
+    assert reweighted == pytest.approx([1.5, 1.5], rel=1e-9)
+    assert abs(moments[1] @ reweighted) < 1e-9 * reweighted.sum()
+
+
+@pytest.mark.parametrize(
+    ("weights", "target"), [([2.0, 1.0], 1e-12), ([1e9, 1e9], 1e-6)]
+)
+def test_a_target_this_near_zero_must_be_zero(weights, target):
+    with pytest.raises(ValueError, match="must be zero"):
+        entropy_balance(np.array(weights), np.array([[1.0, -1.0]]), np.array([target]))
+
+
 def test_balancing_refuses_targets_no_positive_weights_can_reach():
     weights = np.array([1.0, 1.0])
     moments = np.array([[1.0, 1.0], [1.0, 0.0]])

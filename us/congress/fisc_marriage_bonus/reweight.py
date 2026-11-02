@@ -347,37 +347,44 @@ def entropy_balance(
     """Return factors nearest one, in relative entropy, that hit every target.
 
     The dual is smooth and convex, so damped Newton steps reach the unique
-    solution when the targets lie inside what the records can reach. A target of
-    zero takes its scale from the moment's absolute values at the starting
-    weights, so its tolerance stays relative too.
+    solution when the targets lie inside what the records can reach. Each step
+    measures a miss against its target's size. A target of zero has no size, so
+    its miss counts against the moment's absolute total at the current weights,
+    which the step recomputes as the weights move. A target too close to zero to
+    tell apart from it this way must be zero.
     """
-    scale = np.abs(targets)
-    zero = scale == 0
-    scale[zero] = np.abs(moments[zero]) @ weights
-    scale[scale == 0] = 1.0
-    scaled_moments = moments / scale[:, None]
-    scaled_targets = targets / scale
+    size = np.abs(targets)
+    zero = size == 0
+    if np.any(~zero & (size < TARGET_TOLERANCE * (np.abs(moments) @ weights))):
+        raise ValueError("a target this near zero must be zero")
+    # Multipliers on the moments as given; each step rescales them to solve.
     multipliers = np.zeros(moments.shape[0])
 
     def factors_at(point: np.ndarray) -> np.ndarray:
-        return np.exp(np.clip(point @ scaled_moments, -30.0, 30.0))
+        return np.exp(np.clip(point @ moments, -30.0, 30.0))
 
     def dual(point: np.ndarray) -> float:
-        return float(weights @ factors_at(point) - point @ scaled_targets)
-
-    def gap_at(point: np.ndarray) -> np.ndarray:
-        return scaled_moments @ (factors_at(point) * weights) - scaled_targets
+        return float(weights @ factors_at(point) - point @ targets)
 
     for _ in range(MAX_NEWTON_STEPS):
+        current = factors_at(multipliers) * weights
+        scale = np.where(zero, np.abs(moments) @ current, size)
+        scale[scale == 0] = 1.0
+
+        def gap_at(point: np.ndarray) -> np.ndarray:
+            return (moments @ (factors_at(point) * weights) - targets) / scale
+
         gap = gap_at(multipliers)
         worst = np.max(np.abs(gap))
         if worst < TARGET_TOLERANCE:
             return factors_at(multipliers)
-        current = factors_at(multipliers) * weights
+        scaled_moments = moments / scale[:, None]
         hessian = (scaled_moments * current) @ scaled_moments.T
-        direction = np.linalg.solve(hessian + 1e-12 * np.eye(hessian.shape[0]), -gap)
+        direction = (
+            np.linalg.solve(hessian + 1e-12 * np.eye(hessian.shape[0]), -gap) / scale
+        )
         value = dual(multipliers)
-        slope = gap @ direction
+        slope = (gap * scale) @ direction
         step = 1.0
         # Near the solution the dual stops changing within rounding, so a step
         # also counts as progress when it shrinks the worst miss.

@@ -702,31 +702,49 @@ def check_invariants(work: Path, rerun: Path, detail: Path) -> dict:
 
 
 def check_the_decade(work: Path) -> dict:
-    """The later years keep every family as it stands and scale all weights alike."""
+    """The later years keep every family as it stands and scale all weights alike.
+
+    Every year's runs must also pay each tax unit the bill's closed form, with and
+    without the bonus, since the API checks a year's bonus only in total.
+    """
     first = load(work, "fisc", PRIMARY_YEAR)
-    last = load(work, "fisc", LAST_YEAR)
-    for name in (
-        "household.household_id",
-        "tax_unit.tax_unit_id",
-        "person.person_household_id",
-        "person.person_tax_unit_id",
-        "tax_unit.age_head",
-        "tax_unit.age_spouse",
-        "tax_unit.joint",
-        BASE,
-        "household.household_count_people",
-    ):
-        if not np.array_equal(first[name], last[name]):
-            raise AssertionError(f"the later years changed {name}")
-    growth = np.concatenate(
-        [
-            last[f"{entity}.{entity}_weight"] / first[f"{entity}.{entity}_weight"]
-            for entity in ("household", "tax_unit")
-        ]
-    )
-    if growth.max() - growth.min() > WEIGHT_GROWTH_TOLERANCE:
-        raise AssertionError("the later years scaled weights unevenly")
-    return {"weight_growth_from_2026_to_2035": float(growth.mean())}
+    growths = {}
+    for year in YEARS:
+        fisc = load(work, "fisc", year)
+        no_bonus = load(work, "fisc_no_bonus", year)
+        for later in (fisc, no_bonus):
+            for name in (
+                "household.household_id",
+                "tax_unit.tax_unit_id",
+                "person.person_household_id",
+                "person.person_tax_unit_id",
+                "tax_unit.age_head",
+                "tax_unit.age_spouse",
+                "tax_unit.joint",
+                BASE,
+                "household.household_count_people",
+            ):
+                if not np.array_equal(first[name], later[name]):
+                    raise AssertionError(f"{year}: the later years changed {name}")
+        growth = np.concatenate(
+            [
+                fisc[f"{entity}.{entity}_weight"] / first[f"{entity}.{entity}_weight"]
+                for entity in ("household", "tax_unit")
+            ]
+        )
+        if growth.max() - growth.min() > WEIGHT_GROWTH_TOLERANCE:
+            raise AssertionError(f"{year}: the later years scaled weights unevenly")
+        for entity in ("household", "tax_unit"):
+            name = f"{entity}.{entity}_weight"
+            if not np.array_equal(fisc[name], no_bonus[name]):
+                raise AssertionError(f"{year}: the two runs weigh {entity}s apart")
+        try:
+            credit_gaps_from_the_bill(fisc, STATUTORY_BONUS_RATE)
+            credit_gaps_from_the_bill(no_bonus, 0.0)
+        except AssertionError as error:
+            raise AssertionError(f"{year}: {error}") from None
+        growths[year] = float(growth.mean())
+    return {"weight_growth_from_2026_to_2035": growths[LAST_YEAR]}
 
 
 def bonus_gap_from_api(work: Path, year: int) -> dict:

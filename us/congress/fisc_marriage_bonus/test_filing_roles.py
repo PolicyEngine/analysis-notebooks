@@ -27,7 +27,8 @@ def people() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "person_tax_unit_id": [1, 1, 2, 2, 2, 3, 3],
-            "is_separated": [False] * 7,
+            # The file's third couple has separated, so the model files them apart.
+            "is_separated": [False] * 5 + [True, False],
             "A_MARITL": [1, 1, 5, 7, 7, 1, 1],
             "age": [40.0, 38.0, 45.0, 22.0, 6.0, 50.0, 49.0],
         }
@@ -44,6 +45,7 @@ def runs() -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
             [500.0, 1000.0, 500.0]
         ),
         "tax_unit.adjusted_gross_income": np.array([50_000.0, 40_000.0, 60_000.0]),
+        "tax_unit.age_head": np.array([40.0, 45.0, 50.0]),
         "tax_unit.age_spouse": np.array([38.0, 22.0, 0.0]),
     }
     no_bonus = fisc | {
@@ -75,10 +77,19 @@ def test_units_in_another_order_raise():
         filing_roles(units().iloc[::-1], people(), *runs())
 
 
-def test_the_spouse_must_match_the_runs_spouse_age():
+@pytest.mark.parametrize(
+    ("role", "ages"),
+    [
+        ("spouse", [38.0, 45.0, 0.0]),
+        # An ordinary joint unit, which the model and the file both file jointly.
+        ("spouse", [999.0, 22.0, 0.0]),
+        ("head", [40.0, 22.0, 50.0]),
+    ],
+)
+def test_every_head_and_spouse_must_match_the_runs_ages(role, ages):
     fisc, no_bonus = runs()
-    fisc["tax_unit.age_spouse"] = np.array([38.0, 45.0, 0.0])
-    with pytest.raises(ValueError, match="differ from the run's"):
+    fisc[f"tax_unit.age_{role}"] = np.array(ages)
+    with pytest.raises(ValueError, match=f"the {role}s picked here differ"):
         filing_roles(units(), people(), fisc, no_bonus)
 
 

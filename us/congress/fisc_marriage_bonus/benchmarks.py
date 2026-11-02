@@ -24,9 +24,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from reweight import (
+    ALL_RETURNS_2023,
     CHILD_CREDIT_2023,
-    JOINT_COLUMN,
+    HEAD_OF_HOUSEHOLD_RETURNS_2023,
     MARRIED_OWN_CHILD_FAMILIES_BY_INCOME,
+    MARRIED_RETURNS,
+    MARRIED_RETURNS_BY_AGI,
     child_credit_after_tax_limit,
     family_income_moments,
     household_moments,
@@ -44,17 +47,6 @@ FILING_STATUSES = (JOINT, SURVIVING_SPOUSE, HEAD_OF_HOUSEHOLD, "SINGLE", "SEPARA
 ADVANCE_LIMIT_JOINT = 400_000.0
 ADVANCE_LIMIT_OTHER = 200_000.0
 ADVANCE_PER_CHILD_AGI = 40_000.0
-
-# IRS Table 1.2, tax year 2023: returns of married persons filing jointly and
-# surviving spouses. The first band holds the table's no-AGI row.
-JOINT_RETURNS_BY_AGI = (
-    ("under_25000", -np.inf, 25_000.0, 4_932_918),
-    ("25000_to_50000", 25_000.0, 50_000.0, 6_062_981),
-    ("50000_to_100000", 50_000.0, 100_000.0, 13_541_531),
-    ("100000_to_200000", 100_000.0, 200_000.0, 18_900_024),
-    ("200000_to_500000", 200_000.0, 500_000.0, 8_960_113),
-    ("500000_or_more", 500_000.0, np.inf, 2_171_373),
-)
 
 SOURCES = {
     "pep": "Census Vintage 2025 population estimates, July 2024",
@@ -116,11 +108,10 @@ BENCHMARKS = (
         "joint_filers",
         54_568_939 + 4_139_858,
         "soi_13",
-        "Joint, surviving spouse and separate returns, since the model files "
-        "every couple jointly",
+        "Joint, surviving spouse and separate returns, on both sides",
     ),
-    Benchmark("all_filers", 160_602_107, "soi_13"),
-    Benchmark("head_of_household_filers", 21_604_491, "soi_13"),
+    Benchmark("all_filers", ALL_RETURNS_2023, "soi_13"),
+    Benchmark("head_of_household_filers", HEAD_OF_HOUSEHOLD_RETURNS_2023, "soi_13"),
     Benchmark(
         "joint_returns_with_child_credit",
         CHILD_CREDIT_2023["joint_returns_with_child_credit"],
@@ -139,19 +130,19 @@ BENCHMARKS = (
         "other_returns_with_child_credit",
         CHILD_CREDIT_2023["other_returns_with_child_credit"],
         "soi_13",
-        "Head of household plus single",
+        "Head of household plus single, on both sides",
     ),
     Benchmark(
         "other_child_credit",
         CHILD_CREDIT_2023["other_child_credit"],
         "soi_13",
-        "Head of household plus single",
+        "Head of household plus single, on both sides",
     ),
     Benchmark(
         "share_of_advance_children_joint",
         (35_165_385 + 1_038_058) / 61_976_091,
         "advance",
-        "Joint plus separate; recipients of a 2021 advance payment only",
+        "Joint plus separate, on both sides; recipients of a 2021 advance payment only",
     ),
     Benchmark(
         "children_outside_joint_units",
@@ -161,8 +152,13 @@ BENCHMARKS = (
         "any child outside the payments",
     ),
     *(
-        Benchmark(f"joint_filers_agi_{label}", returns, "soi_12")
-        for label, _, _, returns in JOINT_RETURNS_BY_AGI
+        Benchmark(
+            f"joint_filers_agi_{label}",
+            returns,
+            "soi_12",
+            "Joint, surviving spouse and separate returns, on both sides",
+        )
+        for label, _, _, returns in MARRIED_RETURNS_BY_AGI
     ),
     *(
         Benchmark(f"married_own_child_income_{label}", families, "acs", "B19131")
@@ -183,7 +179,9 @@ def measures(run: dict[str, np.ndarray]) -> dict[str, float]:
     if not np.isin(status, FILING_STATUSES).all():
         raise ValueError(f"unknown filing status in {sorted(set(status))}")
     married = status == JOINT
-    joint_column = np.isin(status, JOINT_COLUMN)
+    married_returns = np.isin(status, MARRIED_RETURNS)
+    advance_joint = np.isin(status, (JOINT, "SEPARATE"))
+    advance_other = np.isin(status, (HEAD_OF_HOUSEHOLD, "SINGLE", SURVIVING_SPOUSE))
     filer = run["tax_unit.tax_unit_is_filer"].astype(bool)
     unit_weight = run["tax_unit.tax_unit_weight"].astype(float)
     household_weight = run["household.household_weight"].astype(float)
@@ -200,7 +198,11 @@ def measures(run: dict[str, np.ndarray]) -> dict[str, float]:
     )
     credit = child_credit_after_tax_limit(run)
     claimed = credit > 0
-    limit = np.where(joint_column, ADVANCE_LIMIT_JOINT, ADVANCE_LIMIT_OTHER)
+    limit = np.where(
+        np.isin(status, (JOINT, SURVIVING_SPOUSE)),
+        ADVANCE_LIMIT_JOINT,
+        ADVANCE_LIMIT_OTHER,
+    )
     advance = (children_in_unit > 0) & (
         income < limit + ADVANCE_PER_CHILD_AGI * children_in_unit
     )
@@ -234,28 +236,29 @@ def measures(run: dict[str, np.ndarray]) -> dict[str, float]:
         "married_tax_units_with_child": weighted_count(
             married & (children_in_unit > 0), unit_weight
         ),
-        "joint_filers": weighted_count(joint_column & filer, unit_weight),
+        "joint_filers": weighted_count(married_returns & filer, unit_weight),
         "all_filers": weighted_count(filer, unit_weight),
         "head_of_household_filers": weighted_count(
             (status == HEAD_OF_HOUSEHOLD) & filer, unit_weight
         ),
         "joint_returns_with_child_credit": weighted_count(
-            joint_column & claimed, unit_weight
+            married_returns & claimed, unit_weight
         ),
-        "joint_child_credit": float(unit_weight @ (credit * joint_column)),
+        "joint_child_credit": float(unit_weight @ (credit * married_returns)),
         "other_returns_with_child_credit": weighted_count(
-            ~joint_column & claimed, unit_weight
+            ~married_returns & claimed, unit_weight
         ),
-        "other_child_credit": float(unit_weight @ (credit * ~joint_column)),
+        "other_child_credit": float(unit_weight @ (credit * ~married_returns)),
         "share_of_advance_children_joint": float(
-            child_weight @ (advance & joint_column) / (child_weight @ advance)
+            child_weight @ (advance & advance_joint) / (child_weight @ advance)
         ),
-        "children_outside_joint_units": float(child_weight @ ~joint_column),
+        "children_outside_joint_units": float(child_weight @ advance_other),
         **{
             f"joint_filers_agi_{label}": weighted_count(
-                joint_column & filer & (income >= low) & (income < high), unit_weight
+                married_returns & filer & (income >= low) & (income < high),
+                unit_weight,
             )
-            for label, low, high, _ in JOINT_RETURNS_BY_AGI
+            for label, low, high, _ in MARRIED_RETURNS_BY_AGI
         },
         **{
             name: float(household_weight @ families)
@@ -316,6 +319,8 @@ def load_file(spec: str) -> tuple[str, dict[str, np.ndarray]]:
     if not factors:
         return name, run
     with np.load(factors) as saved:
+        if not np.array_equal(saved["household_id"], run["household.household_id"]):
+            raise ValueError(f"{factors} belongs to another file's households")
         return name, with_weight_factors(run, saved["factor"])
 
 

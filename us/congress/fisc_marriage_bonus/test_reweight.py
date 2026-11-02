@@ -11,14 +11,21 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from reweight import (
+    ALL_RETURNS_2023,
     CHILD_CREDIT_2023,
+    CHILDREN_ANY_HOUSEHOLD_2024,
+    CHILDREN_MARRIED_HOUSEHOLD_2024,
+    CHILDREN_UNDER_18_2024,
+    HEAD_OF_HOUSEHOLD_RETURNS_2023,
     MARRIED_OWN_CHILD_FAMILIES_BY_INCOME,
+    MARRIED_RETURNS_BY_AGI,
     apply_weight_factors,
     calibrate,
     child_credit_after_tax_limit,
     child_credit_moments,
     entropy_balance,
     family_income_moments,
+    filer_moments,
     household_moments,
     household_position,
     published_targets,
@@ -68,6 +75,35 @@ def test_a_married_grandparent_counts_the_child_of_a_single_parent_in_the_home()
     assert moments["children_in_married_couple_households"].tolist() == [0, 2]
     # The own-child count looks only at the head's tax unit.
     assert moments["married_couple_households_with_own_child"].tolist() == [0, 1]
+
+
+def test_an_own_child_must_share_the_heads_tax_unit():
+    run = small_run()
+    # The couple keeps unit 8 alone and the child's unit 9 lodges with them.
+    run["person.person_household_id"] = np.array([10, 10, 10, 10, 10, 30])
+    run["person.person_tax_unit_id"] = np.array([8, 8, 9, 9, 9, 7])
+    run["person.is_household_head"] = np.array([1, 0, 0, 0, 0, 1], dtype=bool)
+    run["household.household_id"] = np.array([30, 10])
+    run["household.household_weight"] = np.array([2.0, 3.0])
+    moments = household_moments(run)
+    assert moments["married_couple_households"].tolist() == [0, 1]
+    assert moments["married_couple_households_with_own_child"].tolist() == [0, 0]
+    assert moments["children_in_married_couple_households"].tolist() == [0, 2]
+
+
+def test_a_surviving_spouse_does_not_make_a_married_couple_household():
+    run = small_run()
+    run["tax_unit.filing_status"] = np.array(
+        ["SINGLE", "SURVIVING_SPOUSE", "HEAD_OF_HOUSEHOLD"]
+    )
+    moments = household_moments(run)
+    assert moments["married_couple_households"].tolist() == [0, 0, 0]
+
+
+def test_a_one_year_old_is_not_an_infant():
+    run = small_run()
+    run["person.age"] = np.array([40, 38, 1, 30, 0, 70])
+    assert household_moments(run)["children_under_1"].tolist() == [0, 0, 1]
 
 
 def test_income_bands_split_married_households_with_a_child_and_no_others():
@@ -126,6 +162,82 @@ def test_a_surviving_spouse_sits_on_the_joint_side_as_in_the_irs_tables():
     assert child_credit_moments(run)["joint_child_credit"].tolist() == [0, 2000, 0]
 
 
+def test_a_separate_return_sits_on_the_married_side_of_the_credit_lines():
+    run = with_credits(small_run())
+    run["tax_unit.filing_status"] = np.array(["SINGLE", "SEPARATE", "SINGLE"])
+    moments = child_credit_moments(run)
+    assert moments["joint_returns_with_child_credit"].tolist() == [0, 1, 0]
+    assert moments["joint_child_credit"].tolist() == [0, 2000, 0]
+    assert moments["other_child_credit"].tolist() == [0, 0, 0]
+
+
+def with_filers(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """Unit 7 files nothing, and units 8 and 9 file on incomes the IRS bands split."""
+    return run | {
+        "tax_unit.tax_unit_is_filer": np.array([False, True, True]),
+        "tax_unit.adjusted_gross_income": np.array([10.0, 120_000.0, 40_000.0]),
+    }
+
+
+def test_filer_lines_follow_each_household_and_skip_units_that_file_nothing():
+    moments = filer_moments(with_filers(small_run()))
+    # Rows run 30, 10, 20: the person alone, the married couple, the parent.
+    assert moments["all_filers"].tolist() == [0, 1, 1]
+    assert moments["head_of_household_filers"].tolist() == [0, 0, 1]
+    assert moments["joint_filers_agi_100000_to_200000"].tolist() == [0, 1, 0]
+    assert moments["joint_filers_agi_under_25000"].tolist() == [0, 0, 0]
+
+
+def test_a_married_unit_that_files_nothing_stays_off_the_agi_lines():
+    run = with_filers(small_run())
+    run["tax_unit.tax_unit_is_filer"] = np.array([False, False, True])
+    assert filer_moments(run)["joint_filers_agi_100000_to_200000"].tolist() == [0, 0, 0]
+
+
+def test_separate_and_surviving_spouse_returns_join_the_married_agi_lines():
+    run = with_filers(small_run())
+    run["tax_unit.filing_status"] = np.array(["SINGLE", "SEPARATE", "SURVIVING_SPOUSE"])
+    moments = filer_moments(run)
+    assert moments["joint_filers_agi_100000_to_200000"].tolist() == [0, 1, 0]
+    assert moments["joint_filers_agi_25000_to_50000"].tolist() == [0, 0, 1]
+    assert moments["head_of_household_filers"].tolist() == [0, 0, 0]
+
+
+def test_the_filer_solve_adds_the_irs_return_lines_to_the_targets():
+    moments = household_moments(small_run())
+    weights = np.array([2.0, 3.0, 4.0])
+    targets = published_targets(moments, weights, filers=True)
+    assert targets["all_filers"] == ALL_RETURNS_2023
+    assert targets["head_of_household_filers"] == HEAD_OF_HOUSEHOLD_RETURNS_2023
+    for label, _, _, returns in MARRIED_RETURNS_BY_AGI:
+        assert targets[f"joint_filers_agi_{label}"] == returns
+    assert "all_filers" not in published_targets(moments, weights)
+
+
+def test_every_solve_holds_the_files_people_income_and_tax():
+    moments = household_moments(small_run())
+    weights = np.array([2.0, 3.0, 4.0])
+    targets = published_targets(moments, weights)
+    assert targets["people"] == moments["people"] @ weights
+    assert targets["people_65_and_over"] == moments["people_65_and_over"] @ weights
+    assert targets["adjusted_gross_income"] == (
+        moments["adjusted_gross_income"] @ weights
+    )
+    assert targets["income_tax"] == moments["income_tax"] @ weights
+
+
+def test_the_married_child_target_takes_the_acs_share_of_the_population_total():
+    moments = household_moments(small_run())
+    targets = published_targets(moments, np.array([2.0, 3.0, 4.0]))
+    share = CHILDREN_MARRIED_HOUSEHOLD_2024 / CHILDREN_ANY_HOUSEHOLD_2024
+    assert targets["children_in_married_couple_households"] == pytest.approx(
+        share * CHILDREN_UNDER_18_2024
+    )
+    assert targets["children_in_married_couple_households"] != (
+        CHILDREN_MARRIED_HOUSEHOLD_2024
+    )
+
+
 def test_the_child_credit_solve_adds_the_irs_lines_to_the_targets():
     moments = household_moments(small_run())
     weights = np.array([2.0, 3.0, 4.0])
@@ -181,6 +293,22 @@ def test_a_detailed_solve_hits_every_target_on_many_records():
     for name, target in result.targets.items():
         assert result.after[name] == pytest.approx(target, rel=1e-6)
     assert (result.factors > 0).all()
+
+
+def test_the_fullest_solve_hands_every_target_to_the_balancing(monkeypatch):
+    seen = {}
+
+    def double_every_weight(weights, moments, targets):
+        seen.update(moments=moments, targets=targets)
+        return np.full(weights.size, 2.0)
+
+    monkeypatch.setattr("reweight.entropy_balance", double_every_weight)
+    run = with_filers(with_credits(small_run()))
+    result = calibrate(run, detailed=True, child_credit=True, filers=True)
+    assert seen["moments"].shape == (27, 3)
+    assert seen["targets"].tolist() == list(result.targets.values())
+    for name in result.targets:
+        assert result.after[name] == 2 * result.before[name]
 
 
 class FakeSimulation:

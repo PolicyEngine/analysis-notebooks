@@ -10,11 +10,12 @@ The current dataset has no household-type or marital-status targets
 (PolicyEngine/microcosm#880), so this asks what such targets would do to the
 bonus. Entropy balancing changes each household's weight as little as it can
 while it hits the targets below, which come from the Census Bureau's population
-estimates and the American Community Survey. run.py then reruns the reform on
-those weights, so every figure from them comes from a full run.
+estimates, the American Community Survey and the IRS. run.py then reruns the
+reform on those weights, so every figure from them comes from a full run.
 
-The dataset's own 2024 income and income tax totals stay fixed, because the
-experiment moves family structure and nothing else.
+The dataset's own 2024 income and income tax totals stay fixed, so the weights
+move family structure and filing without moving those totals. People's incomes
+and family records stay as they are, and tax unit totals move with the weights.
 """
 
 from __future__ import annotations
@@ -48,18 +49,35 @@ MARRIED_OWN_CHILD_FAMILIES_BY_INCOME = (
     ("200000_or_more", 200_000.0, np.inf, 6_160_797),
 )
 
+# The IRS lines below split returns into married people's and everyone else's. The
+# model files a couple jointly unless a spouse has separated, and the bonus turns on
+# marriage, so the married side adds separate returns to the joint column, on the
+# IRS side and the model side alike. IRS tables put surviving spouses in the joint
+# column.
+MARRIED_RETURNS = ("JOINT", "SURVIVING_SPOUSE", "SEPARATE")
+
 # IRS Publication 1304 Table 1.3, tax year 2023, a year before these runs under the
-# same $2,000 credit: the nonrefundable child and other dependent credit. The joint
-# lines add separate returns, since the model files every couple jointly, and the
-# other lines add head of household and single returns.
+# same $2,000 credit: the nonrefundable child and other dependent credit. The other
+# lines add head of household and single returns.
 CHILD_CREDIT_2023 = {
     "joint_returns_with_child_credit": 21_526_250 + 739_342,
     "joint_child_credit": 58_813_439_000 + 1_527_331_000,
     "other_returns_with_child_credit": 14_827_347 + 1_856_588,
     "other_child_credit": 22_060_826_000 + 2_016_769_000,
 }
-# IRS tables put surviving spouses in the joint column.
-JOINT_COLUMN = ("JOINT", "SURVIVING_SPOUSE")
+# IRS Publication 1304 Table 1.3, tax year 2023.
+ALL_RETURNS_2023 = 160_602_107
+HEAD_OF_HOUSEHOLD_RETURNS_2023 = 21_604_491
+# IRS Publication 1304 Table 1.2, tax year 2023: joint and surviving spouse returns
+# plus separate returns. The first band holds the table's no-AGI row.
+MARRIED_RETURNS_BY_AGI = (
+    ("under_25000", -np.inf, 25_000.0, 4_932_918 + 841_526),
+    ("25000_to_50000", 25_000.0, 50_000.0, 6_062_981 + 1_154_641),
+    ("50000_to_100000", 50_000.0, 100_000.0, 13_541_531 + 1_421_936),
+    ("100000_to_200000", 100_000.0, 200_000.0, 18_900_024 + 558_588),
+    ("200000_to_500000", 200_000.0, 500_000.0, 8_960_113 + 123_766),
+    ("500000_or_more", 500_000.0, np.inf, 2_171_373 + 39_401),
+)
 
 MAX_NEWTON_STEPS = 200
 TARGET_TOLERANCE = 1e-9
@@ -91,8 +109,8 @@ def child_credit_after_tax_limit(run: dict[str, np.ndarray]) -> np.ndarray:
     )
 
 
-def child_credit_moments(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
-    """Count the IRS child credit lines in each household, at weight one."""
+def tax_unit_totals(run: dict[str, np.ndarray]):
+    """A function that adds a value per tax unit up to each household."""
     unit_ids = run["tax_unit.tax_unit_id"]
     household_of_unit = np.zeros(unit_ids.size, dtype=int)
     household_of_unit[
@@ -100,8 +118,6 @@ def child_credit_moments(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     ] = household_position(
         run["household.household_id"], run["person.person_household_id"]
     )
-    joint = np.isin(run["tax_unit.filing_status"], JOINT_COLUMN)
-    credit = child_credit_after_tax_limit(run)
 
     def per_household(values: np.ndarray) -> np.ndarray:
         return np.bincount(
@@ -110,11 +126,40 @@ def child_credit_moments(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
             minlength=run["household.household_id"].size,
         )
 
+    return per_household
+
+
+def child_credit_moments(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """Count the IRS child credit lines in each household, at weight one."""
+    per_household = tax_unit_totals(run)
+    married = np.isin(run["tax_unit.filing_status"], MARRIED_RETURNS)
+    credit = child_credit_after_tax_limit(run)
     return {
-        "joint_returns_with_child_credit": per_household((credit > 0) & joint),
-        "joint_child_credit": per_household(credit * joint),
-        "other_returns_with_child_credit": per_household((credit > 0) & ~joint),
-        "other_child_credit": per_household(credit * ~joint),
+        "joint_returns_with_child_credit": per_household((credit > 0) & married),
+        "joint_child_credit": per_household(credit * married),
+        "other_returns_with_child_credit": per_household((credit > 0) & ~married),
+        "other_child_credit": per_household(credit * ~married),
+    }
+
+
+def filer_moments(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """Count the IRS return lines in each household, at weight one."""
+    per_household = tax_unit_totals(run)
+    filer = run["tax_unit.tax_unit_is_filer"].astype(bool)
+    status = run["tax_unit.filing_status"]
+    married = np.isin(status, MARRIED_RETURNS) & filer
+    income = run["tax_unit.adjusted_gross_income"].astype(float)
+    return {
+        "all_filers": per_household(filer),
+        "head_of_household_filers": per_household(
+            (status == "HEAD_OF_HOUSEHOLD") & filer
+        ),
+        **{
+            f"joint_filers_agi_{label}": per_household(
+                married & (income >= low) & (income < high)
+            )
+            for label, low, high, _ in MARRIED_RETURNS_BY_AGI
+        },
     }
 
 
@@ -185,6 +230,7 @@ def published_targets(
     weights: np.ndarray,
     detailed: bool = False,
     child_credit: bool = False,
+    filers: bool = False,
 ) -> dict[str, float]:
     """The published counts, with the totals this experiment holds fixed."""
     held = ("people", "people_65_and_over", "adjusted_gross_income", "income_tax")
@@ -213,6 +259,18 @@ def published_targets(
         "married_couple_households": MARRIED_COUPLE_HOUSEHOLDS_2024,
         **extra,
         **(CHILD_CREDIT_2023 if child_credit else {}),
+        **(
+            {
+                "all_filers": ALL_RETURNS_2023,
+                "head_of_household_filers": HEAD_OF_HOUSEHOLD_RETURNS_2023,
+                **{
+                    f"joint_filers_agi_{label}": returns
+                    for label, _, _, returns in MARRIED_RETURNS_BY_AGI
+                },
+            }
+            if filers
+            else {}
+        ),
         # The ACS and population estimates give different child totals, so the
         # target takes the ACS share of the population estimate's total.
         "children_in_married_couple_households": (
@@ -285,15 +343,20 @@ def apply_weight_factors(sim, year: int, path: Path) -> None:
 
 
 def calibrate(
-    run: dict[str, np.ndarray], detailed: bool = False, child_credit: bool = False
+    run: dict[str, np.ndarray],
+    detailed: bool = False,
+    child_credit: bool = False,
+    filers: bool = False,
 ) -> Calibration:
     moments = household_moments(run)
     if detailed:
         moments |= family_income_moments(moments)
     if child_credit:
         moments |= child_credit_moments(run)
+    if filers:
+        moments |= filer_moments(run)
     weights = run["household.household_weight"].astype(float)
-    targets = published_targets(moments, weights, detailed, child_credit)
+    targets = published_targets(moments, weights, detailed, child_credit, filers)
     names = list(targets)
     matrix = np.vstack([moments[name] for name in names])
     factors = entropy_balance(
@@ -321,10 +384,15 @@ if __name__ == "__main__":
         action="store_true",
         help="Also match the IRS child credit by joint and other returns.",
     )
+    parser.add_argument(
+        "--filers",
+        action="store_true",
+        help="Also match IRS returns in total, by head of household and by AGI.",
+    )
     args = parser.parse_args()
     with np.load(args.work / "filing_2024.npz") as saved:
         run = {name: saved[name] for name in saved.files}
-    result = calibrate(run, args.detailed, args.child_credit)
+    result = calibrate(run, args.detailed, args.child_credit, args.filers)
     np.savez_compressed(
         args.factors,
         household_id=run["household.household_id"],

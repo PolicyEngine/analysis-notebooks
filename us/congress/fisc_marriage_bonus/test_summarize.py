@@ -21,12 +21,14 @@ from summarize import (
     INCOME_TAX,
     NET_INCOME,
     PRIMARY_YEAR,
+    REWEIGHTED_SCENARIOS,
     bonus_gap_from_api,
     bonus_reach,
     check_comparison_file,
     check_detail_runs,
     check_invariants,
     check_poverty_run,
+    check_reweighted_run,
     check_state_tax_against_api,
     check_tables_are_finite,
     check_the_answer_on_every_file,
@@ -513,6 +515,18 @@ class TestTheDecade:
 
 
 class TestComparisonFile:
+    def test_a_zeroed_baseline_income_tax_raises(self, runs):
+        work, _ = runs
+        run = load(work, "baseline", PRIMARY_YEAR)
+        # Household tax falls under FISC, as it does in the real runs.
+        run["household.household_tax"] = (
+            load(work, "fisc", PRIMARY_YEAR)["household.household_tax"] + 1_000.0
+        )
+        run[INCOME_TAX] = np.zeros(N)
+        save(work, "baseline", run)
+        with pytest.raises(AssertionError, match="moved apart"):
+            check_comparison_file(work, "file")
+
     def test_consistent_runs_pass(self, runs):
         work, _ = runs
         result = check_comparison_file(work, "file")
@@ -712,7 +726,17 @@ class TestMain:
         broken[CREDIT][1] += 1
         save(work, "fisc_restored_bonus", broken)
         with pytest.raises(AssertionError, match="restoring"):
-            main(work, rerun, work, work, work, work, {"set": work}, {"set": work})
+            main(
+                work,
+                rerun,
+                work,
+                work,
+                work,
+                work,
+                {"set": work},
+                {"set": work},
+                {"set": work},
+            )
         assert list(results.iterdir()) == []
 
     def test_a_nan_invariant_writes_nothing(self, runs, tmp_path, monkeypatch):
@@ -727,6 +751,7 @@ class TestMain:
             "check_against_api",
             "check_state_tax_against_api",
             "check_comparison_file",
+            "check_reweighted_run",
             "check_the_answer_on_every_file",
             "check_tables_are_finite",
         ):
@@ -750,70 +775,260 @@ class TestMain:
             "sampling_spread",
         ):
             monkeypatch.setattr(summarize, name, lambda *args: empty)
+        monkeypatch.setattr(
+            summarize, "budget_by_year", lambda: pd.DataFrame({"bonus_income_tax": []})
+        )
         monkeypatch.setattr(summarize, "distribution", lambda folder: {})
         monkeypatch.setattr(
             summarize, "reconciliation", lambda *args: (empty, empty, empty)
         )
         monkeypatch.setattr(summarize, "agi_cap_provision", lambda *args: ({}, {}))
         with pytest.raises(ValueError, match="not JSON compliant"):
-            main(work, rerun, work, work, work, work, {"set": work}, {"set": work})
+            main(
+                work,
+                rerun,
+                work,
+                work,
+                work,
+                work,
+                {"set": work},
+                {"set": work},
+                {"set": work},
+            )
         assert list(results.iterdir()) == []
+
+
+FACTOR = 1.5
+BUNDLE = {"model_version": "2.2.1"}
+
+
+def at_factor(run, factor=FACTOR):
+    """A run whose household and tax unit weights moved by one factor."""
+    return run | {
+        "household.household_weight": run["household.household_weight"] * factor,
+        "tax_unit.tax_unit_weight": run["tax_unit.tax_unit_weight"] * factor,
+    }
+
+
+@pytest.fixture
+def reweighted_run(runs, tmp_path):
+    work, _ = runs
+    folder = tmp_path / "reweighted"
+    folder.mkdir()
+    for scenario in REWEIGHTED_SCENARIOS:
+        save(folder, scenario, at_factor(load(work, scenario, PRIMARY_YEAR)))
+    factors = tmp_path / "factors.npz"
+    np.savez(
+        factors,
+        household_id=load(work, "fisc", PRIMARY_YEAR)["household.household_id"],
+        factor=np.full(N, FACTOR),
+    )
+    return work, folder, factors
+
+
+class TestReweightedRun:
+    def test_the_current_run_at_its_factors_passes(self, reweighted_run):
+        check_reweighted_run(*reweighted_run, "set")
+
+    def test_a_decile_may_move_with_the_weights(self, reweighted_run):
+        work, folder, factors = reweighted_run
+        run = load(folder, "fisc", PRIMARY_YEAR)
+        run["household.household_income_decile"] = np.roll(
+            run["household.household_income_decile"], 1
+        )
+        save(folder, "fisc", run)
+        check_reweighted_run(work, folder, factors, "set")
+
+    def test_an_income_that_moved_raises(self, reweighted_run):
+        work, folder, factors = reweighted_run
+        run = load(folder, "fisc", PRIMARY_YEAR)
+        run[NET_INCOME] = run[NET_INCOME] + 1.0
+        save(folder, "fisc", run)
+        with pytest.raises(AssertionError, match="differs in"):
+            check_reweighted_run(work, folder, factors, "set")
+
+    def test_a_zeroed_baseline_raises(self, reweighted_run):
+        work, folder, factors = reweighted_run
+        run = load(folder, "baseline", PRIMARY_YEAR)
+        run[INCOME_TAX] = np.zeros(N)
+        save(folder, "baseline", run)
+        with pytest.raises(AssertionError, match="differs in"):
+            check_reweighted_run(work, folder, factors, "set")
+
+    def test_another_sets_weights_raise(self, reweighted_run):
+        work, folder, factors = reweighted_run
+        current = load(work, "fisc_no_bonus", PRIMARY_YEAR)
+        save(folder, "fisc_no_bonus", at_factor(current, 1.25))
+        with pytest.raises(AssertionError, match="missed the factors"):
+            check_reweighted_run(work, folder, factors, "set")
+
+    def test_a_tax_unit_weight_left_behind_raises(self, reweighted_run):
+        work, folder, factors = reweighted_run
+        run = load(folder, "fisc", PRIMARY_YEAR)
+        run["tax_unit.tax_unit_weight"] = run["tax_unit.tax_unit_weight"] / FACTOR
+        save(folder, "fisc", run)
+        with pytest.raises(AssertionError, match="tax_unit_weight"):
+            check_reweighted_run(work, folder, factors, "set")
+
+    def test_factors_for_other_households_raise(self, reweighted_run):
+        work, folder, factors = reweighted_run
+        np.savez(
+            factors,
+            household_id=np.arange(N)[::-1],
+            factor=np.full(N, FACTOR),
+        )
+        with pytest.raises(AssertionError, match="other households"):
+            check_reweighted_run(work, folder, factors, "set")
+
+    def test_a_run_that_dropped_an_array_raises(self, reweighted_run):
+        work, folder, factors = reweighted_run
+        run = load(folder, "fisc", PRIMARY_YEAR)
+        del run["tax_unit.age_head"]
+        save(folder, "fisc", run)
+        with pytest.raises(AssertionError, match="dropped an array"):
+            check_reweighted_run(work, folder, factors, "set")
 
 
 class TestReweightedDecade:
     @pytest.fixture
-    def decade(self, runs, tmp_path):
-        work, _ = runs
-        fisc = load(work, "fisc", PRIMARY_YEAR)
-        no_bonus = load(work, "fisc_no_bonus", PRIMARY_YEAR)
-        weight = fisc["tax_unit.tax_unit_weight"]
-        bonus = float(((fisc[CREDIT] - no_bonus[CREDIT]) * weight).sum())
+    def decade(self, reweighted_run, tmp_path):
+        work, full, factors = reweighted_run
+        (work / f"fisc_{PRIMARY_YEAR}.json").write_text(json.dumps({"bundle": BUNDLE}))
+        for scenario in ("fisc", "fisc_no_bonus"):
+            arrays = load(work, scenario, PRIMARY_YEAR)
+            np.savez(work / f"{scenario}_{summarize.LAST_YEAR}.npz", **arrays)
         folder = tmp_path / "decade"
         folder.mkdir()
 
-        def save_year(year, amount, tax_change=None):
-            tax_change = -amount if tax_change is None else tax_change
-            totals = {
-                "fisc": {
-                    "family_income_supplement_credit": 100.0 + amount,
-                    "income_tax": 50.0 + tax_change,
-                },
-                "fisc_no_bonus": {
-                    "family_income_supplement_credit": 100.0,
-                    "income_tax": 50.0,
+        def totals(scenario, scale=FACTOR):
+            run = load(work, scenario, PRIMARY_YEAR)
+            weight = run["tax_unit.tax_unit_weight"] * scale
+            return {
+                "family_income_supplement_credit": float(run[CREDIT] @ weight),
+                "income_tax": float(run[INCOME_TAX] @ weight),
+            }
+
+        def save_year(file_year, **changes):
+            record = {
+                "year": file_year,
+                "bundle": BUNDLE,
+                "totals": {
+                    "fisc": totals("fisc"),
+                    "fisc_no_bonus": totals("fisc_no_bonus"),
                 },
             }
-            (folder / f"decade_{year}.json").write_text(
-                json.dumps({"year": year, "totals": totals})
+            (folder / f"decade_{file_year}.json").write_text(
+                json.dumps(record | changes)
             )
 
         for year in summarize.YEARS:
-            save_year(year, bonus)
-        return work, folder, bonus, save_year
+            save_year(year)
+        bonus = (
+            totals("fisc")["family_income_supplement_credit"]
+            - totals("fisc_no_bonus")["family_income_supplement_credit"]
+        )
+        return work, full, folder, factors, bonus, totals, save_year
+
+    @staticmethod
+    def current_bonus(bonus):
+        return pd.Series(bonus / FACTOR, index=summarize.YEARS)
+
+    def table(self, decade):
+        work, full, folder, factors, bonus, *_ = decade
+        return reweighted_decade(folder, full, work, factors, self.current_bonus(bonus))
 
     def test_the_window_sums_each_year_and_starts_at_the_full_run(self, decade):
-        work, folder, bonus, _ = decade
-        table = reweighted_decade(folder, work)
+        bonus = decade[4]
+        table = self.table(decade)
         assert table.loc[PRIMARY_YEAR, "bonus"] == pytest.approx(bonus)
         assert table.loc["2026-2035", "bonus"] == pytest.approx(10 * bonus)
         assert table.loc["2026-2035", "income_tax_change"] == pytest.approx(-10 * bonus)
 
     def test_a_first_year_off_the_full_run_raises(self, decade):
-        work, folder, bonus, save_year = decade
-        save_year(PRIMARY_YEAR, bonus * 1.01)
+        full = decade[1]
+        run = load(full, "fisc", PRIMARY_YEAR)
+        run[CREDIT] = run[CREDIT] * 1.01
+        save(full, "fisc", run)
         with pytest.raises(AssertionError, match="disagree on 2026"):
-            reweighted_decade(folder, work)
+            self.table(decade)
 
     def test_income_tax_that_misses_the_credit_raises(self, decade):
-        work, folder, bonus, save_year = decade
-        save_year(2030, bonus, tax_change=-0.9 * bonus)
+        *_, totals, save_year = decade
+        fisc = totals("fisc")
+        fisc["income_tax"] += 0.1 * decade[4]
+        save_year(2030, totals={"fisc": fisc, "fisc_no_bonus": totals("fisc_no_bonus")})
         with pytest.raises(AssertionError, match="income tax disagree"):
-            reweighted_decade(folder, work)
+            self.table(decade)
+
+    def test_a_file_that_holds_another_year_raises(self, decade):
+        decade[-1](2031, year=2030)
+        with pytest.raises(AssertionError, match="holds 2030"):
+            self.table(decade)
+
+    def test_a_year_from_another_bundle_raises(self, decade):
+        decade[-1](2031, bundle={"model_version": "2.2.0"})
+        with pytest.raises(AssertionError, match="another bundle"):
+            self.table(decade)
+
+    @pytest.mark.parametrize("scale", [1.0, 1.25, 0.0])
+    @pytest.mark.parametrize(
+        ("year", "message"),
+        [(2033, "strays from"), (2035, "misses the current run")],
+    )
+    def test_a_year_at_other_weights_raises(self, decade, scale, year, message):
+        *_, totals, save_year = decade
+        save_year(
+            year,
+            totals={
+                "fisc": totals("fisc", scale),
+                "fisc_no_bonus": totals("fisc_no_bonus", scale),
+            },
+        )
+        with pytest.raises(AssertionError, match=message):
+            self.table(decade)
+
+    @pytest.mark.parametrize(
+        ("year", "message"),
+        [(2033, "strays from"), (2035, "misses the current run")],
+    )
+    def test_a_year_with_its_two_runs_swapped_raises(self, decade, year, message):
+        *_, totals, save_year = decade
+        save_year(
+            year,
+            totals={
+                "fisc": totals("fisc_no_bonus"),
+                "fisc_no_bonus": totals("fisc"),
+            },
+        )
+        with pytest.raises(AssertionError, match=message):
+            self.table(decade)
+
+    def test_a_year_a_little_past_the_margin_raises(self, decade):
+        save_year = decade[-1]
+        run_fisc = decade[5]("fisc")
+        run_fisc["family_income_supplement_credit"] += 0.01 * decade[4]
+        run_fisc["income_tax"] -= 0.01 * decade[4]
+        save_year(
+            2033,
+            totals={"fisc": run_fisc, "fisc_no_bonus": decade[5]("fisc_no_bonus")},
+        )
+        with pytest.raises(AssertionError, match="strays from"):
+            self.table(decade)
+
+    def test_factors_for_other_households_raise(self, decade):
+        factors = decade[3]
+        np.savez(factors, household_id=np.arange(N)[::-1], factor=np.full(N, FACTOR))
+        with pytest.raises(AssertionError, match="other households"):
+            self.table(decade)
 
     def test_each_set_keeps_its_own_rows_and_text_years(self, decade):
-        work, folder, bonus, _ = decade
+        work, full, folder, factors, bonus, *_ = decade
         table = summarize.reweighted_decades(
-            {"one": folder, "two": folder}, {"one": work, "two": work}
+            {"one": folder, "two": folder},
+            {"one": full, "two": full},
+            work,
+            {"one": factors, "two": factors},
+            self.current_bonus(bonus),
         )
         assert set(table.weights) == {"one", "two"}
         assert (table.year == "2026-2035").sum() == 2
@@ -822,15 +1037,21 @@ class TestReweightedDecade:
         assert summed.bonus.item() == pytest.approx(10 * bonus)
 
     def test_a_label_with_no_weights_raises(self, decade):
-        work, folder, *_ = decade
+        work, full, folder, factors, bonus, *_ = decade
         with pytest.raises(KeyError):
-            summarize.reweighted_decades({"one": folder}, {"two": work})
+            summarize.reweighted_decades(
+                {"one": folder},
+                {"two": full},
+                work,
+                {"one": factors},
+                self.current_bonus(bonus),
+            )
 
     def test_a_missing_year_raises(self, decade):
-        work, folder, *_ = decade
+        folder = decade[2]
         (folder / "decade_2031.json").unlink()
         with pytest.raises(FileNotFoundError):
-            reweighted_decade(folder, work)
+            self.table(decade)
 
 
 class TestBonusGapFromApi:
@@ -925,6 +1146,16 @@ class TestDataComparison:
         for column in ("march_2025_data", "cps_2024_data", "todays_data"):
             assert table[column]["bonus"] <= table[column]["statutory_bonus"] + 1
             assert 0 < table[column]["joint_share_of_base_amount"] < 1
+
+    def test_each_file_reports_the_income_tax_full_fisc_gives_up(self, table, runs):
+        work, _ = runs
+        baseline = load(work, "baseline", PRIMARY_YEAR)
+        fisc = load(work, "fisc", PRIMARY_YEAR)
+        given_up = baseline["tax_unit.income_tax"] - fisc["tax_unit.income_tax"]
+        expected = float((fisc["tax_unit.tax_unit_weight"] * given_up).sum())
+        assert expected != 0
+        for column in ("march_2025_data", "cps_2024_data", "todays_data"):
+            assert table[column]["full_fisc_income_tax"] == pytest.approx(expected)
 
     def test_the_child_share_counts_children_in_joint_units(self, table):
         share = table["todays_data"]["share_of_children_in_joint_tax_units"]

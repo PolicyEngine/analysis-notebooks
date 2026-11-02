@@ -12,8 +12,8 @@ import numpy as np
 import pytest
 from benchmarks import (
     BENCHMARKS,
-    JOINT_RETURNS_BY_AGI,
     MARRIED_OWN_CHILD_FAMILIES_BY_INCOME,
+    MARRIED_RETURNS_BY_AGI,
     benchmark_table,
     load_file,
     measures,
@@ -67,6 +67,14 @@ def test_infants_count_at_the_unit_weight_and_split_by_marriage():
     assert result["share_of_infants_in_married_tax_units"] == 2 / 5
 
 
+def test_a_one_year_old_is_not_an_infant():
+    run = small_run()
+    run["person.age"] = np.array([40, 39, 1, 25, 33, 0])
+    result = measures(run)
+    assert result["children_under_1"] == 3
+    assert result["share_of_infants_in_married_tax_units"] == 0
+
+
 def test_the_credit_stops_at_the_tax_liability():
     result = measures(small_run())
     assert result["joint_child_credit"] == 4_000
@@ -91,6 +99,37 @@ def test_surviving_spouses_sit_in_the_joint_column_but_not_among_married_units()
     assert result["married_tax_units"] == 2
 
 
+def test_separate_returns_sit_on_the_married_side_of_the_irs_lines():
+    run = small_run()
+    run["tax_unit.filing_status"] = np.array(["JOINT", "SINGLE", "SEPARATE"])
+    result = measures(run)
+    assert result["joint_filers"] == 5
+    assert result["married_tax_units"] == 2
+    assert result["joint_child_credit"] == 5_500
+    assert result["other_child_credit"] == 0
+    assert result["joint_returns_with_child_credit"] == 5
+    assert result["other_returns_with_child_credit"] == 0
+    assert result["joint_filers_agi_25000_to_50000"] == 3
+
+
+def test_a_joint_unit_that_files_nothing_stays_off_the_return_rows():
+    run = small_run()
+    run["tax_unit.tax_unit_is_filer"] = np.array([False, False, True])
+    result = measures(run)
+    assert result["joint_filers"] == 0
+    assert result["joint_filers_agi_100000_to_200000"] == 0
+    assert result["all_filers"] == 3
+
+
+def test_the_advance_rows_pair_separate_with_joint_and_widowers_with_the_rest():
+    run = small_run()
+    run["tax_unit.filing_status"] = np.array(["SEPARATE", "SINGLE", "SURVIVING_SPOUSE"])
+    result = measures(run)
+    # Two children in the separate unit and three with the surviving spouse.
+    assert result["share_of_advance_children_joint"] == 2 / 5
+    assert result["children_outside_joint_units"] == 3
+
+
 def test_the_advance_share_leaves_out_units_past_the_phase_out():
     run = small_run()
     run["tax_unit.adjusted_gross_income"] = np.array([500_000.0, 9_000.0, 30_000.0])
@@ -100,18 +139,18 @@ def test_the_advance_share_leaves_out_units_past_the_phase_out():
 
 def test_income_bands_cover_every_filer_once():
     result = measures(small_run())
-    bands = [f"joint_filers_agi_{item[0]}" for item in JOINT_RETURNS_BY_AGI]
+    bands = [f"joint_filers_agi_{item[0]}" for item in MARRIED_RETURNS_BY_AGI]
     assert sum(result[name] for name in bands) == result["joint_filers"]
-    assert JOINT_RETURNS_BY_AGI[0][1] == -np.inf
-    assert JOINT_RETURNS_BY_AGI[-1][2] == np.inf
-    for low, high in pairwise(JOINT_RETURNS_BY_AGI):
+    assert MARRIED_RETURNS_BY_AGI[0][1] == -np.inf
+    assert MARRIED_RETURNS_BY_AGI[-1][2] == np.inf
+    for low, high in pairwise(MARRIED_RETURNS_BY_AGI):
         assert low[2] == high[1]
 
 
 def test_the_published_bands_add_to_the_published_total():
-    bands = sum(item[3] for item in JOINT_RETURNS_BY_AGI)
-    # Table 1.2 rounds each row of its joint column, so the sum can miss by one.
-    assert abs(bands - 54_568_939) <= 2
+    bands = sum(item[3] for item in MARRIED_RETURNS_BY_AGI)
+    # Table 1.2 rounds each row of its columns, so the sum can miss by one or two.
+    assert abs(bands - (54_568_939 + 4_139_858)) <= 2
 
 
 def test_the_published_family_bands_add_to_the_published_total():
@@ -155,11 +194,27 @@ def test_household_factors_reach_the_tax_units_inside_each_household():
 def test_a_file_spec_can_carry_factors(tmp_path):
     arrays = small_run()
     np.savez(tmp_path / "filing_2024.npz", **arrays)
-    np.savez(tmp_path / "f.npz", factor=np.array([2.0, 2.0]))
+    np.savez(
+        tmp_path / "f.npz",
+        household_id=arrays["household.household_id"],
+        factor=np.array([2.0, 2.0]),
+    )
     name, run = load_file(f"doubled={tmp_path},{tmp_path / 'f.npz'}")
     assert name == "doubled"
     assert measures(run)["households"] == 2 * measures(arrays)["households"]
     assert load_file(f"plain={tmp_path}")[1]["household.household_weight"].sum() == 5
+
+
+def test_factors_from_another_file_raise(tmp_path):
+    arrays = small_run()
+    np.savez(tmp_path / "filing_2024.npz", **arrays)
+    np.savez(
+        tmp_path / "f.npz",
+        household_id=arrays["household.household_id"][::-1],
+        factor=np.array([1.0, 3.0]),
+    )
+    with pytest.raises(ValueError, match="another file"):
+        load_file(f"foreign={tmp_path},{tmp_path / 'f.npz'}")
 
 
 def test_a_filing_status_outside_the_known_names_raises():
@@ -179,7 +234,7 @@ def test_a_child_link_to_no_unit_raises():
 @settings(max_examples=60, deadline=None)
 @given(st.lists(st.floats(0.5, 500.0), min_size=3, max_size=3))
 def test_children_split_exactly_across_status_at_any_weights(raw):
-    """Invariant: joint and non-joint children add to all children."""
+    """Invariant: children in joint units and in the other columns add to all."""
     run = small_run()
     run["tax_unit.tax_unit_weight"] = np.array(raw)
     result = measures(run)

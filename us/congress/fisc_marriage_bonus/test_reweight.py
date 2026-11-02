@@ -614,10 +614,26 @@ def test_a_zero_target_is_met_at_the_final_weights_after_a_large_cut():
     assert abs(moments[1] @ reweighted) < 1e-9 * reweighted.sum()
 
 
+def test_a_small_target_is_met_when_the_weights_shrink_to_it():
+    """Review 13's counterexamples: each target sits far below its moment's total
+    at the starting weights and well above rounding at the final ones."""
+    weights = np.array([1e10])
+    factors = entropy_balance(weights, np.array([[1.0]]), np.array([1.0]))
+    assert weights * factors == pytest.approx([1.0], rel=1e-9)
+
+    weights = np.array([1.0, 2.0, 1.0])
+    moments = np.array([[1.0, 1.0, 1.0], [0.0, 0.0, 1.0], [1.0, -1.0, 0.0]])
+    targets = np.array([4.0, 4.0 - 1e-6, 1e-10])
+    reached = moments @ (weights * entropy_balance(weights, moments, targets))
+    assert reached == pytest.approx(targets, rel=1e-9)
+
+
 @pytest.mark.parametrize(
-    ("weights", "target"), [([2.0, 1.0], 1e-12), ([1e9, 1e9], 1e-6)]
+    ("weights", "target"),
+    [([2.0, 1.0], 1e-12), ([1e9, 1e9], 1e-6), ([1.0, 1.0], 2.0**-25)],
 )
 def test_a_target_this_near_zero_must_be_zero(weights, target):
+    """Each tolerance falls below the rounding of a two-record sum."""
     with pytest.raises(ValueError, match="must be zero"):
         entropy_balance(np.array(weights), np.array([[1.0, -1.0]]), np.array([target]))
 

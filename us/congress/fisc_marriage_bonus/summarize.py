@@ -467,6 +467,10 @@ def check_two_runs(reform: dict, baseline: dict, label: str) -> dict:
     """Check two runs against each other for every tax unit and household."""
     results: dict[str, object] = {}
     check_same_records(reform, baseline, label)
+    # Neither the bonus nor the AGI cap moves anyone's AGI or base amount.
+    for name in ("tax_unit.adjusted_gross_income", BASE):
+        if not np.array_equal(reform[name], baseline[name]):
+            raise AssertionError(f"{label}: {name} differs between runs")
 
     credit = reform[CREDIT] - baseline[CREDIT]
     tax_gap = np.abs((baseline[INCOME_TAX] - reform[INCOME_TAX]) - credit)
@@ -705,7 +709,9 @@ def check_the_decade(work: Path) -> dict:
     """The later years keep every family as it stands and scale all weights alike.
 
     Every year's runs must also pay each tax unit the bill's closed form, with and
-    without the bonus, since the API checks a year's bonus only in total.
+    without the bonus, since the API checks a year's bonus only in total. The
+    closed form takes each unit's AGI and base amount from the run; the bonus
+    moves neither, so the two runs must agree on both.
     """
     first = load(work, "fisc", PRIMARY_YEAR)
     growths = {}
@@ -738,6 +744,9 @@ def check_the_decade(work: Path) -> dict:
             name = f"{entity}.{entity}_weight"
             if not np.array_equal(fisc[name], no_bonus[name]):
                 raise AssertionError(f"{year}: the two runs weigh {entity}s apart")
+        agi = "tax_unit.adjusted_gross_income"
+        if not np.array_equal(fisc[agi], no_bonus[agi]):
+            raise AssertionError(f"{year}: the bonus moved AGI")
         try:
             credit_gaps_from_the_bill(fisc, STATUTORY_BONUS_RATE)
             credit_gaps_from_the_bill(no_bonus, 0.0)

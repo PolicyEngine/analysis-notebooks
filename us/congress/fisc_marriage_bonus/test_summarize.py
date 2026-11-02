@@ -553,6 +553,23 @@ class TestTheDecade:
         with pytest.raises(AssertionError, match="2031: the credit differs"):
             check_the_decade(decade)
 
+    def test_agi_moved_with_the_credit_in_one_run_fails(self, decade):
+        # Review 13's mutation: AGI rises with a cut in the credit, so the closed
+        # form still holds in the bonus run.
+        run = self.grown(0.2, 2031)
+        agi = run["tax_unit.adjusted_gross_income"]
+        unit = np.flatnonzero(
+            run["tax_unit.joint"] & (agi > 250_000) & (run[CREDIT] > 1_000)
+        )[0]
+        agi[unit] += 5_000.0
+        credit = closed_form_credit(run[BASE], run["tax_unit.joint"], agi, 0.2)
+        run[INCOME_TAX] = run[INCOME_TAX] + run[CREDIT] - credit
+        run[CREDIT] = credit
+        assert credit[unit] == self.grown(0.2, 2031)[CREDIT][unit] - 1_000.0
+        self.save_year(decade, 2031, fisc=run)
+        with pytest.raises(AssertionError, match="2031: the bonus moved AGI"):
+            check_the_decade(decade)
+
 
 class TestComparisonFile:
     def test_a_zeroed_baseline_income_tax_raises(self, runs):
@@ -587,6 +604,22 @@ class TestComparisonFile:
         fisc[CREDIT][married] += 100
         save(work, "fisc", fisc)
         with pytest.raises(AssertionError, match="closed form"):
+            check_comparison_file(work, "file")
+
+    @pytest.mark.parametrize("name", ["tax_unit.adjusted_gross_income", BASE])
+    def test_agi_or_a_base_amount_that_differs_between_the_runs_fails(self, runs, name):
+        # A $400,000 joint unit keeps a zero credit either way, so only the
+        # comparison of the two runs can see the change.
+        work, _ = runs
+        fisc = fake_run(0.2)
+        agi = fisc["tax_unit.adjusted_gross_income"]
+        unit = np.flatnonzero(
+            fisc["tax_unit.joint"] & (agi == 400_000) & (fisc[BASE] > 0)
+        )[0]
+        fisc[name][unit] += 1_000.0
+        assert fisc[CREDIT][unit] == 0
+        save(work, "fisc", fisc)
+        with pytest.raises(AssertionError, match=f"{name} differs between runs"):
             check_comparison_file(work, "file")
 
     def test_a_baseline_with_other_weights_fails(self, runs):

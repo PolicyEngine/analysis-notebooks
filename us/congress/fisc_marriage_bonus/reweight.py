@@ -350,13 +350,20 @@ def entropy_balance(
     solution when the targets lie inside what the records can reach. Each step
     measures a miss against its target's size. A target of zero has no size, so
     its miss counts against the moment's absolute total at the current weights,
-    which the step recomputes as the weights move. A target too close to zero to
-    tell apart from it this way must be zero.
+    which the step recomputes as the weights move. Summing n records can round by
+    n machine epsilons of that absolute total, so a nonzero target whose
+    tolerance falls below that, at the weights where the solve ends, cannot be
+    told apart from zero and must be zero.
     """
     size = np.abs(targets)
     zero = size == 0
-    if np.any(~zero & (size < TARGET_TOLERANCE * (np.abs(moments) @ weights))):
-        raise ValueError("a target this near zero must be zero")
+    rounding = moments.shape[1] * np.finfo(float).eps
+
+    def check_resolvable(current: np.ndarray) -> None:
+        total = np.abs(moments) @ current
+        if np.any(~zero & (TARGET_TOLERANCE * size < rounding * total)):
+            raise ValueError("a target this near zero must be zero")
+
     # Multipliers on the moments as given; each step rescales them to solve.
     multipliers = np.zeros(moments.shape[0])
 
@@ -377,6 +384,7 @@ def entropy_balance(
         gap = gap_at(multipliers)
         worst = np.max(np.abs(gap))
         if worst < TARGET_TOLERANCE:
+            check_resolvable(current)
             return factors_at(multipliers)
         scaled_moments = moments / scale[:, None]
         hessian = (scaled_moments * current) @ scaled_moments.T
@@ -396,6 +404,7 @@ def entropy_balance(
             if step < 1e-10:
                 raise ValueError("the line search stalled")
         multipliers = multipliers + step * direction
+    check_resolvable(factors_at(multipliers) * weights)
     raise ValueError("entropy balancing did not reach the targets")
 
 

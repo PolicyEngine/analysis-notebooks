@@ -175,13 +175,17 @@ def weighted_decile(
     """Rank households into person-weighted deciles of a ranking income.
 
     Follows the convention in household_income_decile: each decile holds about
-    a tenth of people, and households with negative income take group -1.
+    a tenth of people, households with negative income take group -1, and tied
+    households all take the cumulative weight at the end of their tie, so they
+    share a group.
     """
     income = np.asarray(income, dtype=float)
     weight = np.asarray(household_weight, dtype=float) * np.asarray(people, dtype=float)
     order = np.argsort(income, kind="stable")
+    ranked = income[order]
+    end_of_tie = np.searchsorted(ranked, ranked, side="right") - 1
     position = np.empty(len(income), dtype=float)
-    position[order] = np.cumsum(weight[order]) / weight.sum()
+    position[order] = np.cumsum(weight[order])[end_of_tie] / weight.sum()
     groups = np.clip(np.ceil(position * 10), 1, 10).astype(int)
     return np.where(income < 0, NEGATIVE_INCOME_GROUP, groups)
 

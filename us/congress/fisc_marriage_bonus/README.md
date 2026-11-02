@@ -4,7 +4,7 @@ Richard Reeves asked PolicyEngine to rerun FISC reform 76612 with the 20 percent
 
 ## Result
 
-On the current dataset, which the app runs, the bonus costs $34.3 billion in 2026 and $334.5 billion over 2026-2035, the sum of ten calendar years in nominal dollars with no discounting. That dataset holds more married parents than outside sources count. Reweighted to match those sources, the bonus costs $27.3 billion and $28.5 billion in 2026 on the two runs that match the IRS child credit lines, and $30.3 billion and $30.6 billion on the two that match only Census counts, close to Reeves's $30 billion. Over 2026-2035 the four runs give $267.5 billion to $296.7 billion. [Benchmarks](#benchmarks-outside-the-cps) and [Four sets of weights](#four-sets-of-weights) set out those runs.
+On the current dataset, which the app runs, the bonus costs $34.3 billion in 2026 and $334.5 billion over 2026-2035, the sum of ten calendar years in nominal dollars with no discounting. That dataset holds more married parents than outside sources count. Reweighted to match those sources, the bonus costs $26.2 billion and $28.1 billion in 2026 on the two runs that match the IRS child credit lines, and $30.4 billion and $30.9 billion on the two that match only Census counts, close to Reeves's $30 billion. Over 2026-2035 the four runs give $256.0 billion to $298.5 billion. [Benchmarks](#benchmarks-outside-the-cps) and [Four sets of weights](#four-sets-of-weights) set out those runs.
 
 The next table comes from the current dataset through the production API.
 
@@ -95,7 +95,7 @@ The child tax credit that FISC repeals scores +0.084 on household income and -0.
 
 ### Against the $30 billion estimate
 
-Reeves's back-of-envelope figure, "arithmetic on the married share", came to about $30 billion a year. The four reweighted runs bracket it at $27.3 billion to $30.6 billion, and the model's $34.3 billion on the current dataset exceeds it by $4.3 billion, or 14 percent. At 20 percent, $30 billion implies a $150 billion married base. In the model joint filers hold $204.5 billion of base amount, 72 percent of $284.3 billion, before the limits apply, and $170.3 billion of credit once they apply, 70 percent of $244.3 billion. Twenty percent of the first gives the $40.9 billion statutory bonus, and the limits take that to $34.3 billion. On the March 2025 data, joint filers hold $153.1 billion of base amount, which sits close to the implied $150 billion and gives a $30.6 billion statutory bonus. The CPS resample gives a $29.6 billion bonus after the limits. `results/versus_reeves_estimate.csv` and `results/data_comparison_2026.csv` hold these lines. We do not know the inputs behind the $30 billion, so this analysis makes no claim about where the figures part.
+Reeves's back-of-envelope figure, "arithmetic on the married share", came to about $30 billion a year. The four reweighted runs bracket it at $26.2 billion to $30.9 billion, and the model's $34.3 billion on the current dataset exceeds it by $4.3 billion, or 14 percent. At 20 percent, $30 billion implies a $150 billion married base. In the model joint filers hold $204.5 billion of base amount, 72 percent of $284.3 billion, before the limits apply, and $170.3 billion of credit once they apply, 70 percent of $244.3 billion. Twenty percent of the first gives the $40.9 billion statutory bonus, and the limits take that to $34.3 billion. On the March 2025 data, joint filers hold $153.1 billion of base amount, which sits close to the implied $150 billion and gives a $30.6 billion statutory bonus. The CPS resample gives a $29.6 billion bonus after the limits. `results/versus_reeves_estimate.csv` and `results/data_comparison_2026.csv` hold these lines. We do not know the inputs behind the $30 billion, so this analysis makes no claim about where the figures part.
 
 ### Against the March 2025 estimate
 
@@ -166,20 +166,24 @@ Today's model refuses the March 2025 file as it stands, because the file saves a
 | 2024 | Published | March 2025 data | CPS resample | Current dataset | Household counts | Family income | Child credit | All targets |
 |---|---|---|---|---|---|---|---|---|
 | Children under 18 | 72.55M | 74.76M | 68.42M | 76.68M | 72.55M | 72.55M | 72.55M | 72.55M |
-| Infants under 1 | 3.62M | 3.84M | 2.97M | 2.75M | 2.76M | 3.62M | 2.94M | 3.62M |
-| Married-couple households | 61.98M | 67.97M | 66.48M | 80.87M | 61.98M | 61.98M | 61.98M | 61.98M |
-| With an own child under 18 | 22.98M | 23.58M | 24.64M | 27.47M | 22.98M | 22.98M | 22.98M | 22.98M |
-| Children in those households | 48.55M | 40.69M | 47.85M | 55.89M | 48.43M | 48.43M | 48.43M | 48.43M |
-| Those families under $25,000 | 0.72M | 3.35M | 0.99M | 2.88M | 2.50M | 0.72M | 3.01M | 0.72M |
-| Married filers | 58.71M | 66.05M | 65.16M | 85.04M | 69.45M | 69.44M | 68.53M | 58.71M |
-| All filers | 160.60M | 153.44M | 145.94M | 158.03M | 180.79M | 180.50M | 182.27M | 160.60M |
-| Head of household filers | 21.60M | 16.69M | 11.02M | 13.06M | 16.32M | 16.46M | 20.37M | 21.60M |
-| Married returns with child credit | 22.27M | 19.46M | 22.20M | 29.74M | 24.79M | 26.68M | 22.27M | 22.27M |
-| Child credit on married returns | $60.3B | $50.0B | $64.9B | $77.1B | $65.5B | $74.7B | $60.3B | $60.3B |
-| Child credit on other returns | $24.1B | $21.0B | $14.1B | $12.2B | $14.6B | $14.6B | $24.1B | $24.1B |
-| Married filers under $25,000 AGI | 5.77M | 12.03M | 5.97M | 17.37M | 15.22M | 13.97M | 16.00M | 5.77M |
-| Children outside joint units | 25.77M in 2021 | 34.49M | 21.48M | 21.74M | 24.67M | 24.74M | 26.90M | 27.87M |
-| Infants in joint units | 60.5% CDC, 69.9% ACS | 49.9% | 70.5% | 73.0% | 65.8% | 64.5% | 59.0% | 53.4% |
+| Infants under 1 | 3.62M | 3.84M | 2.97M | 2.75M | 2.74M | 3.62M | 2.93M | 3.62M |
+| Married-couple households, survey codes | 61.98M |  |  | 78.54M | 61.98M | 61.98M | 61.98M | 61.98M |
+| With an own child under 18 | 22.98M |  |  | 27.48M | 22.98M | 22.98M | 22.98M | 22.98M |
+| Children in those households | 48.55M |  |  | 55.50M | 48.27M | 48.26M | 48.26M | 48.27M |
+| Those families under $25,000 | 0.72M |  |  | 2.67M | 2.28M | 0.72M | 2.57M | 0.72M |
+| Married-couple households, joint filing | 61.98M | 67.54M | 66.12M | 80.21M | 65.92M | 65.99M | 65.10M | 64.14M |
+| With a dependent under 18 | 22.98M | 23.27M | 24.46M | 27.33M | 23.07M | 23.05M | 21.75M | 20.87M |
+| Children in those households | 48.55M | 40.08M | 47.52M | 55.65M | 48.68M | 48.66M | 47.64M | 46.52M |
+| Those families under $25,000 | 0.72M | 3.31M | 0.97M | 2.88M | 2.53M | 1.03M | 2.72M | 0.84M |
+| Married filers | 58.71M | 66.05M | 65.16M | 85.04M | 72.53M | 72.60M | 71.18M | 58.71M |
+| All filers | 160.60M | 153.44M | 145.94M | 158.03M | 176.95M | 176.66M | 179.23M | 160.60M |
+| Head of household filers | 21.60M | 16.69M | 11.02M | 13.06M | 15.85M | 15.97M | 20.38M | 21.60M |
+| Married returns with child credit | 22.27M | 19.46M | 22.20M | 29.74M | 25.37M | 27.03M | 22.27M | 22.27M |
+| Child credit on married returns | $60.3B | $50.0B | $64.9B | $77.1B | $66.3B | $74.5B | $60.3B | $60.3B |
+| Child credit on other returns | $24.1B | $21.0B | $14.1B | $12.2B | $14.3B | $14.4B | $24.1B | $24.1B |
+| Married filers under $25,000 AGI | 5.77M | 12.03M | 5.97M | 17.37M | 16.12M | 15.01M | 16.68M | 5.77M |
+| Children outside joint units | 25.77M in 2021 | 34.49M | 21.48M | 21.74M | 24.42M | 24.48M | 27.69M | 30.23M |
+| Infants in joint units | 60.5% CDC, 69.9% ACS | 49.9% | 70.5% | 73.0% | 66.4% | 65.2% | 57.6% | 50.6% |
 
 The household rows count married couples two ways. The survey's relationship codes, which only the current dataset keeps, give the measure the ACS uses and the one the reweighting targets, and the head's joint filing gives a measure every file has. On married family structure the CPS resample stands closest of the three files on most rows, and the current dataset overshoots most: 78.5 million married-couple households by the survey's codes and 80.2 million by joint filing, against 62.0 million, and 29.7 million married returns with the child credit against 22.3 million. The survey's codes overshoot too, so the excess sits in the file's records and weights, not in how the model reads marriage. The March 2025 file comes closest on married couples with a dependent child, holds too few children in married households, 40.1 million against 48.6 million, and stands closest on head of household filers and on credit outside married returns. The credit rows follow the IRS measure, the nonrefundable child and other dependent credit after the tax liability limit. The model computes that limit without the deduction for state and local taxes, so on a return that itemizes the deduction it can allow more credit than the IRS would.
 
@@ -194,48 +198,48 @@ The last two rows come from outside the targets. In 2021 the IRS paid advance ch
 | 2026 | Current dataset | Household counts | Family income | Child credit | All targets |
 |---|---|---|---|---|---|
 | Outside targets added | | Children, households, married households, own children | Household counts, infants, families by income | Household counts, IRS child credit | All of them, and IRS returns by status and AGI |
-| Bonus | $34.29B | $30.29B | $30.65B | $28.48B | $27.27B |
-| Full FISC, income tax given up | $145.30B | $140.83B | $137.00B | $136.00B | $133.11B |
-| Joint share of base amount | 71.9% | 66.3% | 66.0% | 63.0% | 60.9% |
-| Share of children in joint tax units | 71.6% | 66.0% | 65.9% | 62.9% | 61.6% |
-| Bottom five deciles' share of the bonus | 50.1% | 48.0% | 39.4% | 49.0% | 41.1% |
-| Top three deciles' share of the bonus | 22.9% | 25.7% | 29.7% | 25.4% | 26.5% |
-| Bottom five deciles' share of the rest of the credit | 61.3% | 60.9% | 56.3% | 59.5% | 56.4% |
-| Bottom five deciles' share of the bonus, equivalised income | 61.9% | 61.6% | 55.2% | 61.9% | 57.2% |
-| Gini without the bonus | 0.47012 | 0.47714 | 0.47017 | 0.47801 | 0.48237 |
-| Gini with the bonus | 0.46942 | 0.47663 | 0.46983 | 0.47750 | 0.48202 |
-| Equivalised Gini without the bonus | 0.44545 | 0.44293 | 0.42751 | 0.44251 | 0.44706 |
-| Equivalised Gini with the bonus | 0.44393 | 0.44157 | 0.42634 | 0.44121 | 0.44588 |
-| Bonus concentration, household income | +0.066 | +0.134 | +0.237 | +0.118 | +0.210 |
-| Rest of the credit, household income | -0.075 | -0.032 | +0.032 | -0.010 | +0.042 |
-| Largest weight factor |  | 3.3 | 8.1 | 10.0 | 35.0 |
-| Effective sample of households | 9,174 | 7,242 | 7,156 | 6,974 | 4,285 |
+| Bonus | $34.29B | $30.41B | $30.87B | $28.06B | $26.18B |
+| Full FISC, income tax given up | $145.30B | $140.15B | $137.53B | $135.46B | $133.01B |
+| Joint share of base amount | 71.9% | 66.6% | 66.3% | 61.9% | 57.8% |
+| Share of children in joint tax units | 71.6% | 66.3% | 66.3% | 61.8% | 58.3% |
+| Bottom five deciles' share of the bonus | 50.1% | 47.3% | 39.7% | 47.5% | 40.1% |
+| Top three deciles' share of the bonus | 22.9% | 26.4% | 29.9% | 26.2% | 26.7% |
+| Bottom five deciles' share of the rest of the credit | 61.3% | 60.2% | 55.9% | 58.4% | 55.9% |
+| Bottom five deciles' share of the bonus, equivalised income | 61.9% | 61.0% | 55.3% | 61.1% | 57.0% |
+| Gini without the bonus | 0.47012 | 0.47894 | 0.47238 | 0.47988 | 0.48228 |
+| Gini with the bonus | 0.46942 | 0.47843 | 0.47201 | 0.47940 | 0.48195 |
+| Equivalised Gini without the bonus | 0.44545 | 0.44746 | 0.43356 | 0.44559 | 0.44745 |
+| Equivalised Gini with the bonus | 0.44393 | 0.44610 | 0.43236 | 0.44433 | 0.44634 |
+| Bonus concentration, household income | +0.066 | +0.137 | +0.226 | +0.134 | +0.218 |
+| Rest of the credit, household income | -0.075 | -0.029 | +0.029 | +0.002 | +0.049 |
+| Largest weight factor |  | 2.4 | 4.5 | 9.1 | 29.9 |
+| Effective sample of households | 9,174 | 7,536 | 7,454 | 7,243 | 4,799 |
 
-Family structure moves the total, and the IRS credit moves it further. Household counts alone take $4.0 billion off the bonus. The IRS rows then shift credit from married returns to other returns, which takes off $1.8 billion more, and the all-target run lands at $27.3 billion.
+Family structure moves the total, and the IRS credit moves it further. Household counts alone take $3.9 billion off the bonus. The IRS rows then shift credit from married returns to other returns, which takes off $2.4 billion more, and the all-target run lands at $26.2 billion.
 
-Married families by income move the distribution. The two sets that match the ACS income bands put the bottom five deciles' share at 39 and 41 percent, close to the CPS resample's 39 percent, and the two that leave them unmatched stay at 48 and 49 percent. So the 50 percent on the current dataset overstates how far the bonus reaches down, and about 40 percent fits the outside evidence better. On every set the bonus lowers the Gini, and the bottom five deciles receive less of it than of the rest of the credit.
+Married families by income move the distribution. The two sets that match the ACS income bands put the bottom five deciles' share at 39.7 and 40.1 percent, close to the CPS resample's 39.4 percent, and the two that leave them unmatched stay at 47.3 and 47.5 percent. So the 50 percent on the current dataset overstates how far the bonus reaches down, and about 40 percent fits the outside evidence better. On every set the bonus lowers the Gini, and the bottom five deciles receive less of it than of the rest of the credit.
 
-Those two sets inherit the gap between the ACS's family income and the AGI the model side uses. A weights-only check on the saved arrays, which adds household benefits to AGI in those bands, raises the bottom five deciles' share and lowers the bonus on both sets, by less than the two sets differ from each other. We keep the runs on AGI, so we give that direction and no figure.
+Those two sets inherit the gap between the ACS's family income and the AGI the model side uses. A weights-only check on the saved arrays, which adds household benefits to AGI in those bands, raises the bottom five deciles' share and lowers the bonus on both sets. The share moves by more than the two sets differ from each other and by far less than they differ from the other two. We keep the runs on AGI, so we give that direction and no figure.
 
-No set wins everywhere. The household counts and family income sets leave too many married returns with the child credit, 25.4 million and 27.0 million against 22.3 million, and family income leaves $74.6 billion of credit on them against $60.3 billion. Both put 24.3 million children outside joint units, near the 25.8 million children outside joint and separate returns that the IRS paid advance credits on in 2021, and both put 65 to 66 percent of infants in joint units, inside the range of the two birth measures. The child credit set matches the credit lines, and it leaves 16.7 million married filers under $25,000 AGI against 5.8 million and 179.2 million filers against 160.6 million. The all-target set matches every line it targets. The two sets with the IRS lines fall below both birth measures, with 57.5 and 50.4 percent of infants in joint units, and the all-target set pays for its fit with a largest weight factor of 30.4 and an effective sample of 4,789 households, down from 9,174. So the held-out readings favour the two sets without the IRS lines, and the IRS lines favour the other two. We report the four runs as a range and name no one set as correct.
+No set wins everywhere. The household counts and family income sets leave too many married returns with the child credit, 25.4 million and 27.0 million against 22.3 million, and family income leaves $74.5 billion of credit on them against $60.3 billion. They put 24.4 million and 24.5 million children outside joint units, near the 25.8 million children outside joint and separate returns that the IRS paid advance credits on in 2021, and both put 65 to 66 percent of infants in joint units, inside the range of the two birth measures. The child credit set matches the credit lines, and it leaves 16.7 million married filers under $25,000 AGI against 5.8 million and 179.2 million filers against 160.6 million. The all-target set matches every line it targets. The two sets with the IRS lines fall below both birth measures, with 57.6 and 50.6 percent of infants in joint units, and the all-target set pays for its fit with a largest weight factor of 29.9 and an effective sample of 4,799 households, down from 9,174. So the held-out readings favour the two sets without the IRS lines, and the IRS lines favour the other two. We report the four runs as a range and name no one set as correct.
 
 The ten-year totals come from `decade.py`, which runs FISC and FISC with the bonus at zero for each year on a given set of weights.
 
 | Year | Household counts | Family income | Child credit | All targets |
 |---|---|---|---|---|
-| 2026 | $30.29B | $30.65B | $28.48B | $27.27B |
-| 2027 | $30.28B | $30.54B | $28.46B | $27.29B |
-| 2028 | $30.28B | $30.45B | $28.45B | $27.28B |
-| 2029 | $30.10B | $30.17B | $28.29B | $27.15B |
-| 2030 | $29.86B | $29.83B | $28.07B | $26.98B |
-| 2031 | $29.73B | $29.63B | $27.95B | $26.89B |
-| 2032 | $29.51B | $29.30B | $27.76B | $26.70B |
-| 2033 | $29.18B | $28.83B | $27.46B | $26.34B |
-| 2034 | $28.93B | $28.46B | $27.23B | $26.03B |
-| 2035 | $28.56B | $27.98B | $26.90B | $25.61B |
-| 2026-2035 | $296.74B | $295.82B | $279.04B | $267.53B |
+| 2026 | $30.41B | $30.87B | $28.06B | $26.18B |
+| 2027 | $30.39B | $30.77B | $28.03B | $26.17B |
+| 2028 | $30.37B | $30.68B | $28.01B | $26.14B |
+| 2029 | $30.19B | $30.42B | $27.85B | $25.99B |
+| 2030 | $29.94B | $30.09B | $27.62B | $25.81B |
+| 2031 | $29.80B | $29.90B | $27.50B | $25.72B |
+| 2032 | $29.58B | $29.59B | $27.30B | $25.52B |
+| 2033 | $29.24B | $29.13B | $27.00B | $25.17B |
+| 2034 | $28.98B | $28.77B | $26.77B | $24.87B |
+| 2035 | $28.62B | $28.30B | $26.43B | $24.45B |
+| 2026-2035 | $297.52B | $298.51B | $274.55B | $256.01B |
 
-Household counts gives the highest ten-year total even though family income starts higher, because family income's bonus falls faster: from $30.65 billion to $27.98 billion, against $30.29 billion to $28.56 billion.
+Family income gives the highest ten-year total. It starts $0.46 billion above household counts and falls faster, from $30.87 billion to $28.30 billion against $30.41 billion to $28.62 billion, and household counts passes it in 2033.
 
 ## Method
 
@@ -247,7 +251,7 @@ Household counts gives the highest ten-year total even though family income star
 
 **Baseline.** Current law in policyengine-us 2.2.1, which carries the 2025 reconciliation law's child tax credit of $2,200 in 2026.
 
-**Deciles.** `household_income_decile` ranks households on household net income with no size adjustment, and each decile holds about a tenth of people. These tables rank every component on current-law income so that the rows compare. Percent of income divides by current-law household net income. Households with negative net income take their own row, which receives $9 of the bonus.
+**Deciles.** `household_income_decile` ranks households on household net income with no size adjustment, and each decile holds about a tenth of people. Tied households share a decile, because each takes the cumulative weight at the end of its tie. These tables rank every component on current-law income so that the rows compare. Percent of income divides by current-law household net income. Households with negative net income take their own row, which receives $9 of the bonus.
 
 **Gini.** The API's Gini matches household net income across households, with no equivalisation and with negative incomes left in, to within 0.00001 in all seven scenarios that `summarize.py` compares. The second measure takes equivalised household net income across people, with negative incomes at zero.
 
@@ -261,11 +265,14 @@ Household counts gives the highest ten-year total even though family income star
 | Decile dollars, shares, receipt, percent of income | Local microsimulation |
 | Equivalised Gini, concentration, joint shares, limits | Local microsimulation |
 | AGI cap row of the provision table | Local microsimulation, `fisc_no_agi_cap` |
-| Three data files, four sets of weights | Local runs of today's bundle on each file and set |
+| Three data files | Local runs of today's bundle on each file |
+| Four sets of weights | Runs of today's bundle on each set, on a Mac and on GitHub's hosted runners |
 | Benchmarks | Local 2024 runs of `filing_benchmark.py`, and the published sources in `benchmarks.py` |
 | March 2025 comparison | Local rerun of the March 2025 stack, and local runs of today's bundle on the March 2025 data |
 
 The local runs and the API use the same bundle. Local and API reform differences match to the dollar in every scenario compared: both put the bonus at $34.285367915B of income tax in 2026 and $32.064156757B in 2035, and the newborn, phase-out and above-zero AGI cap variants match at $8.8704B, -$37.5928B and -$4.3196B. Local income tax levels sit a constant $0.33 billion below the API's in all three core scenarios, and local net income sits $0.51 billion above it. Household counts, weights and child tax credit totals match exactly, so those do not explain the gap, and we have not traced its cause. It moves decile means by at most $1.72 on the bonus and full FISC, in deciles 7 to 10, and by $2.81 and $2.12 on the child tax credit repeal, in deciles 9 and 10, where the two largely offset. Local and API poverty rates for children and working-age adults match to 15 digits. The local rate for people 65 and over runs 0.0086 points above the API's, cause also untraced, which lifts the all-ages rate by 0.0015 points.
+
+A Mac ran the current dataset's runs, the March 2025 and CPS runs, the 2024 benchmark runs, and the child credit set's three 2026 runs and 2026 to 2028 decade years. GitHub's hosted Ubuntu 24.04 runners ran the [other 46 reweighted runs](https://github.com/PolicyEngine/analysis-notebooks/actions/runs/41534335933) on the same factor files and package versions. `github_runs.yml` records that workflow, `requirements_github_runs.txt` its versions and `factors/` the factor files. A [control](https://github.com/PolicyEngine/analysis-notebooks/actions/runs/41532468491) reran `fisc` for 2026 on the child credit weights on x86 and arm runners, and all 32 saved arrays matched the Mac's bit for bit. `summarize.py` holds each set's 2026 runs to exact equality with the current dataset's run on every array the weights leave alone. A year's totals on any set sit at most 3.6 parts per billion from that year's current-dataset arrays at the set's factors.
 
 ## Versions
 
@@ -292,7 +299,7 @@ The local runs and the API use the same bundle. Local and API reform differences
 - The bonus measured by income tax and by net income each sit within 0.1 percent of the bonus measured by the credit.
 - The `fisc_no_agi_cap` credit equals the uncapped formula at every AGI, and that run pays credit at zero and negative AGI.
 - Local and API results agree on the bonus in every year from 2026 to 2035, the decile means and totals, the Gini in seven scenarios, and the poverty rates, within the tolerances `summarize.py` states.
-- Every saved array holds finite numbers. On each data file, saved deciles match a fresh person-weighted ranking of net income, and saved equivalised income equals net income over the square root of household size to within a dollar plus two single-precision steps.
+- Every saved array holds finite numbers. On each data file, saved deciles match a fresh person-weighted ranking of net income that gives tied households one decile, and saved equivalised income equals net income over the square root of household size to within a dollar plus two single-precision steps.
 - Text columns hold text and every other column holds finite numbers. Blanks fall only in the cells each table leaves empty, and `invariants.json` refuses a NaN before any table reaches disk.
 - The runs that saved the detail arrays match the runs in the work folder, array for array.
 - Each household's net income moves by its rebuilt credit less its rebuilt state income tax, to within a dollar. State income tax moves only for tax units whose credit moves, and its total matches the API's.
@@ -303,15 +310,15 @@ The local runs and the API use the same bundle. Local and API reform differences
 - Each set of weights passes every check the comparison files pass.
 - On each file, full FISC moves income tax and household tax the same way.
 - Each reweighted run matches the current run array for array, apart from the weights and the deciles they rank, and each household and tax unit weight equals the current weight times its factor.
-- In each year of `decade.py`, income tax moves by the credit to within 0.1 percent, and its 2026 bonus sits within 0.1 percent of the full 2026 run. Each year's file records that year, the current run's bundle and the sha256 of the set's factor file, and a file run on other factors raises. In every year its totals and its bonus match the current run's saved arrays for that year at the set's factors to within 0.1 percent.
+- In each year of `decade.py`, income tax moves by the credit to within 0.1 percent, and its 2026 bonus sits within 0.1 percent of the full 2026 run. Each year's file records that year, the current run's bundle and the sha256 of the set's factor file, and a file run on other factors raises. In every year its totals and its bonus match the current run's saved arrays for that year at the set's factors to within one part in a million.
 - `relationship.py` refuses a dataset whose sha256 differs from the run's bundle, and codes for other people by id, another order, other households or other ages. `reweight.py` refuses codes saved from another dataset or for other people, and refuses to calibrate a run without them.
 - `filing_roles.py` picks each tax unit's head and spouse as the model does, and refuses a head or spouse whose age differs from the run's in any tax unit.
-- `reweight.py` hits every target with positive factors or raises, It stops only when each miss plus a bound on its rounding falls within tolerance, and it raises on a nonzero target whose tolerance that bound alone fills where the solve ends. The bound covers the worst case, so it refuses some targets the arithmetic would hit. Factors from another file or a simulation that keeps its old weights raise. Every reader of a factor file refuses one with a NaN, a factor at or below zero, a household listed twice or mismatched shapes before it compares anything.
+- `reweight.py` hits every target with positive factors or raises. It stops only when each miss plus a bound on its rounding falls within tolerance, and it raises on a nonzero target whose tolerance that bound alone fills where the solve ends. The bound covers the worst case, so it refuses some targets the arithmetic would hit. Factors from another file or a simulation that keeps its old weights raise. Every reader of a factor file refuses one with a NaN, a factor at or below zero, a household listed twice or mismatched shapes before it compares anything.
 - `benchmarks.py` raises on a filing status it does not know and on factors from another file.
 - Only tax units the model files jointly receive the bonus in 2035.
 - The March 2025 rerun reproduces the published CSV in 2026 and 2035.
 
-`test_analysis.py` states the formula and table properties for all inputs with Hypothesis, and `test_reweight.py` states that any reachable target in its ranges lands within tolerance with positive factors, and that records the targets cannot tell apart keep one factor. `test_summarize.py` confirms that the checks fail on runs that break them, including offsetting tax errors, net income with no tax or benefit behind it, a household bonus that misses its tax units, state tax with no credit behind it, poverty flags that their incomes do not explain, income moved between SPM units, a comparison file whose household bonus misses its tax units, a saved NaN, a stray blank or infinity in a table, a file that breaks the regressivity answer, a reweighted run that differs from the current run or misses its factors, and a decade year with the wrong year, bundle, weights or factor file, with its two runs swapped, with the year before's totals, with totals 0.4 percent off, or with a bonus 0.8 percent off while each scenario's totals stay within tolerance, and a current-law year whose records, weights or per-unit credits stray, including credit moved between two units with the total unchanged and a bonus run that alone moves AGI with its credit, and a comparison file whose two runs differ in a unit's AGI or base amount. It also confirms that the decile rows sum to the aggregate. `test_reweight.py` confirms that the calibration counts households by the survey's codes and returns by filing status, that a spouse of the householder makes a married-couple household whatever the couple's filing, that parents who live with a child householder do not, that a grandchild or an ever-married child counts among the children but not as an own child, that a zero target lands within tolerance of its moment's total at the final weights, even when the weights shrink a billionfold, that a target far below its moment's total at the starting weights lands once the weights shrink to it, and that rounding cannot hide a miss, and that a nonzero target whose tolerance the rounding bound fills raises, including where products underflow. It also confirms that in the joint-filing count a head whom their own tax unit claims as a dependent makes no married-couple household. `test_relationship.py` confirms that codes listed in another order, for other households or for other ages raise, including two people of one age swapped within a household, `test_filing_roles.py` that the head and spouse follow the model's rule on age ties and separation and must match the run's ages in every unit, and `test_benchmarks.py` that a surviving spouse takes the $200,000 advance credit threshold and that a file without the codes leaves only the survey-code rows blank.
+`test_analysis.py` states the formula and table properties for all inputs with Hypothesis, including that `weighted_decile` gives tied households one decile and matches microdf's `decile_rank`, which `household_income_decile` calls. `test_reweight.py` states that any reachable target in its ranges lands within tolerance with positive factors, and that records the targets cannot tell apart keep one factor. `test_summarize.py` confirms that the checks fail on runs that break them, including offsetting tax errors, net income with no tax or benefit behind it, a household bonus that misses its tax units, state tax with no credit behind it, poverty flags that their incomes do not explain, income moved between SPM units, a comparison file whose household bonus misses its tax units, a saved NaN, a stray blank or infinity in a table, a file that breaks the regressivity answer, a reweighted run that differs from the current run or misses its factors, and a decade year with the wrong year, bundle, weights or factor file, with its two runs swapped, with the year before's totals, with totals ten parts in a million off, or with a bonus past its tolerance while each scenario's totals stay within theirs, and a current-law year whose records, weights or per-unit credits stray, including credit moved between two units with the total unchanged and a bonus run that alone moves AGI with its credit, and a comparison file whose two runs differ in a unit's AGI or base amount. It also confirms that the decile rows sum to the aggregate. `test_reweight.py` confirms that the calibration counts households by the survey's codes and returns by filing status, that a spouse of the householder makes a married-couple household whatever the couple's filing, that parents who live with a child householder do not, that a grandchild or an ever-married child counts among the children but not as an own child, that a zero target lands within tolerance of its moment's total at the final weights, even when the weights shrink a billionfold, that a target far below its moment's total at the starting weights lands once the weights shrink to it, and that rounding cannot hide a miss, and that a nonzero target whose tolerance the rounding bound fills raises, including where products underflow. It also confirms that in the joint-filing count a head whom their own tax unit claims as a dependent makes no married-couple household. `test_relationship.py` confirms that codes listed in another order, for other households or for other ages raise, including two people of one age swapped within a household, `test_filing_roles.py` that the head and spouse follow the model's rule on age ties and separation and must match the run's ages in every unit, and `test_benchmarks.py` that a surviving spouse takes the $200,000 advance credit threshold and that a file without the codes leaves only the survey-code rows blank.
 
 ## Caveats
 
@@ -394,7 +401,7 @@ uv run us/congress/fisc_marriage_bonus/reweight.py work factors_child_credit.npz
 uv run us/congress/fisc_marriage_bonus/reweight.py work factors_all_targets.npz --detailed --child-credit --filers
 ```
 
-Each set then needs `baseline`, `fisc` and `fisc_no_bonus` for 2026 with `run.py --people --detail --weight-factors <factors.npz>` in its own folder, and each ten-year total needs `decade.py`:
+`factors/` holds the files those four commands wrote for the reported runs, so a rerun can skip the solve. Each set then needs `baseline`, `fisc` and `fisc_no_bonus` for 2026 with `run.py --people --detail --weight-factors <factors.npz>` in its own folder, and each ten-year total needs `decade.py`:
 
 ```bash
 uv run us/congress/fisc_marriage_bonus/decade.py 2026 2027 2028 2029 2030 2031 2032 2033 2034 2035 --out decade_household_counts --weight-factors factors_household_counts.npz

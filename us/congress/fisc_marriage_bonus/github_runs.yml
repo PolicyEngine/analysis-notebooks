@@ -1,0 +1,76 @@
+# A record of the workflow that ran 46 of this folder's reweighted runs on GitHub's
+# hosted runners, off a shared Mac while a host reservation held heavy local work:
+# https://github.com/PolicyEngine/analysis-notebooks/actions/runs/41534335933
+# It ran from a scratch branch, with these factor files in factors-v5/ and these pins
+# in requirements-v5.txt. To run it again, copy it to .github/workflows on a branch
+# named in the push trigger and upload the artifacts into summarize.py's folders.
+name: FISC v5 runs
+on:
+  push:
+    branches: [fisc-v5-runs]
+permissions:
+  contents: read
+jobs:
+  ticket:
+    name: ${{ matrix.set }} ${{ matrix.ticket }} ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        os: [ubuntu-24.04]
+        set: [child_credit, all_targets, household_counts, family_income]
+        ticket:
+          [baseline, fisc, fisc_no_bonus, "2026", "2027", "2028", "2029", "2030", "2031", "2032", "2033", "2034", "2035"]
+        # The Mac finished these before the Microcosm US release held heavy local work.
+        exclude:
+          - { set: child_credit, ticket: baseline }
+          - { set: child_credit, ticket: fisc }
+          - { set: child_credit, ticket: fisc_no_bonus }
+          - { set: child_credit, ticket: "2026" }
+          - { set: child_credit, ticket: "2027" }
+          - { set: child_credit, ticket: "2028" }
+    defaults:
+      run:
+        working-directory: us/congress/fisc_marriage_bonus
+    env:
+      OMP_NUM_THREADS: "4"
+      PYTHONPATH: "."
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install the pinned bundle
+        run: |
+          uv venv --python 3.13.9 .venv
+          uv pip install --python .venv/bin/python -r requirements_github_runs.txt
+      - name: Run the ticket
+        run: |
+          mkdir -p out
+          FACTORS="factors/factors_${{ matrix.set }}.npz"
+          case "${{ matrix.ticket }}" in
+            20*) cmd=(decade.py "${{ matrix.ticket }}" --out out --weight-factors "$FACTORS") ;;
+            *) cmd=(run.py "${{ matrix.ticket }}" 2026 --out out --people --detail --weight-factors "$FACTORS") ;;
+          esac
+          {
+            git rev-parse HEAD
+            uname -a
+            .venv/bin/python --version
+            sha256sum "$FACTORS" run.py decade.py analysis.py reweight.py
+          } > out/platform.txt
+          .venv/bin/python - "${cmd[@]}" <<'PY'
+          import resource, subprocess, sys
+
+          rc = subprocess.call([sys.executable, *sys.argv[1:]])
+          peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss / 1e6
+          print(f"peak_rss_gb {peak:.2f}", flush=True)
+          with open("out/peak_rss.txt", "w") as file:
+              file.write(f"{peak:.2f}\n")
+          sys.exit(rc)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ matrix.set }}-${{ matrix.ticket }}-${{ matrix.os }}
+          path: us/congress/fisc_marriage_bonus/out/
+          retention-days: 14

@@ -1127,20 +1127,27 @@ class TestReweightedDecade:
         with pytest.raises(AssertionError, match="misses the current run"):
             self.table(decade)
 
-    def test_a_middle_year_four_tenths_of_a_percent_off_raises(self, decade):
+    @staticmethod
+    def scaled_totals(totals, scale, year):
+        return {
+            scenario: {
+                name: scale * value
+                for name, value in totals(scenario, year=year).items()
+            }
+            for scenario in ("fisc", "fisc_no_bonus")
+        }
+
+    @pytest.mark.parametrize("off", [0.004, 1e-5])
+    def test_a_middle_year_off_past_the_tolerance_raises(self, decade, off):
         *_, totals, save_year = decade
-        save_year(
-            2030,
-            totals={
-                scenario: {
-                    name: 1.004 * value
-                    for name, value in totals(scenario, year=2030).items()
-                }
-                for scenario in ("fisc", "fisc_no_bonus")
-            },
-        )
+        save_year(2030, totals=self.scaled_totals(totals, 1 + off, 2030))
         with pytest.raises(AssertionError, match="misses the current run"):
             self.table(decade)
+
+    def test_a_gap_the_size_of_these_runs_passes(self, decade):
+        *_, totals, save_year = decade
+        save_year(2030, totals=self.scaled_totals(totals, 1 + 4e-9, 2030))
+        self.table(decade)
 
     def test_factors_for_other_households_raise(self, decade):
         factors, save_year = decade[3], decade[-1]
@@ -1169,15 +1176,17 @@ class TestReweightedDecade:
             self.table(decade)
 
     @pytest.mark.parametrize("year", [2030, 2035])
-    def test_a_bonus_off_by_under_one_percent_raises(self, decade, year):
+    def test_a_bonus_off_past_its_tolerance_raises(self, decade, year):
         # Moving the credit and income tax together leaves each scenario's
-        # totals inside the tolerance while the bonus moves 0.8%.
+        # totals inside the tolerance while the bonus moves past its own.
         *_, totals, save_year = decade
         fisc = totals("fisc", year=year)
-        shift = 0.008 * decade[4] * growth(year)
-        assert shift < summarize.RELATIVE_TOLERANCE * min(
-            abs(fisc["family_income_supplement_credit"]), abs(fisc["income_tax"])
+        shift = (
+            0.5
+            * summarize.ARRAY_TOTAL_TOLERANCE
+            * min(abs(fisc["family_income_supplement_credit"]), abs(fisc["income_tax"]))
         )
+        assert shift > summarize.ARRAY_TOTAL_TOLERANCE * decade[4] * growth(year)
         fisc["family_income_supplement_credit"] += shift
         fisc["income_tax"] -= shift
         save_year(

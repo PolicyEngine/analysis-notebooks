@@ -94,6 +94,10 @@ MOVED_BY_WEIGHTS = {
 # Saved weights carry single precision, so a ratio of two of them misses by a few
 # parts in ten million.
 WEIGHT_RATIO_TOLERANCE = 1e-6
+# A reweighted run moves no one's taxes, so a year's totals must match the current
+# run's arrays at the same factors. The gap reaches 3.6e-9 on these runs, on the Mac
+# and on GitHub's runners alike.
+ARRAY_TOTAL_TOLERANCE = 1e-6
 # Census Bureau, America's Families and Living Arrangements: 2023, in thousands.
 # Table C3: https://www2.census.gov/programs-surveys/demo/tables/families/2023/cps-2023/tabc3-all.xls
 # Table FG3, opposite-sex couples: https://www2.census.gov/programs-surveys/demo/tables/families/2023/cps-2023/tabfg3-all.xls
@@ -1472,7 +1476,7 @@ def check_arrays_behind_the_decade(
         ):
             from_arrays[scenario][name] = float(expected @ weight)
             if abs(measured[name] - from_arrays[scenario][name]) > (
-                RELATIVE_TOLERANCE * abs(from_arrays[scenario][name])
+                ARRAY_TOTAL_TOLERANCE * abs(from_arrays[scenario][name])
             ):
                 raise AssertionError(
                     f"{year}: {scenario} misses the current run at these weights"
@@ -1480,7 +1484,7 @@ def check_arrays_behind_the_decade(
     for name in ("family_income_supplement_credit", "income_tax"):
         expected = from_arrays["fisc"][name] - from_arrays["fisc_no_bonus"][name]
         measured = totals["fisc"][name] - totals["fisc_no_bonus"][name]
-        if abs(measured - expected) > RELATIVE_TOLERANCE * abs(expected):
+        if abs(measured - expected) > ARRAY_TOTAL_TOLERANCE * abs(expected):
             raise AssertionError(f"{year}: the bonus misses the current run's arrays")
 
 

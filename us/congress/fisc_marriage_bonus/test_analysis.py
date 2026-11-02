@@ -15,6 +15,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
+from microdf import MicroSeries
 
 from analysis import (
     FISC_POLICY,
@@ -138,6 +139,53 @@ class TestBonusLostToLimits:
         _, to_cap = bonus_lost_to_limits(base, True, agi)
         if agi >= 1.2 * base:
             assert float(to_cap) == pytest.approx(0, abs=1e-6)
+
+
+@st.composite
+def tied_households(draw):
+    """Households whose incomes come from a few values, so most of them tie."""
+    n = draw(SIZE)
+    return {
+        "income": draw(
+            hnp.arrays(
+                float, n, elements=st.sampled_from([-500.0, 0.0, 1e3, 2e3, 5e4, 7e5])
+            )
+        ),
+        "weight": draw(hnp.arrays(float, n, elements=floats(1, 5_000))),
+        "people": draw(hnp.arrays(int, n, elements=st.integers(1, 8))),
+    }
+
+
+class TestWeightedDecile:
+    def test_a_tie_at_a_decile_line_lands_above_it(self):
+        # The shares of the family income run's tie at the 70th percentile.
+        groups = weighted_decile(
+            np.array([1.0, 2.0, 2.0, 3.0]),
+            np.array([0.699687742, 0.000110572, 0.00023583, 0.299965856]),
+            np.ones(4),
+        )
+        assert groups.tolist() == [7, 8, 8, 10]
+
+    @settings(deadline=None)
+    @given(tied_households())
+    def test_tied_households_share_a_group(self, hh):
+        groups = weighted_decile(hh["income"], hh["weight"], hh["people"])
+        for income in np.unique(hh["income"]):
+            assert np.unique(groups[hh["income"] == income]).size == 1
+
+    @settings(deadline=None)
+    @given(st.one_of(households(), tied_households()))
+    def test_matches_the_ranking_the_model_uses(self, hh):
+        # household_income_decile ranks with MicroSeries.decile_rank, then sets
+        # negative incomes to their own group.
+        model = MicroSeries(
+            hh["income"], weights=hh["weight"] * hh["people"]
+        ).decile_rank()
+        expected = np.where(
+            hh["income"] < 0, NEGATIVE_INCOME_GROUP, np.asarray(model, dtype=float)
+        )
+        groups = weighted_decile(hh["income"], hh["weight"], hh["people"])
+        assert np.array_equal(groups, expected)
 
 
 class TestDecileTable:

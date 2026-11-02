@@ -1205,6 +1205,43 @@ def deciles_by_data_file(ecps: Path, cps: Path, work: Path) -> pd.DataFrame:
     )
 
 
+def weight_factor_summary(work: Path, factors: dict[str, Path]) -> pd.DataFrame:
+    """How far each set moves the weights, and the sample its weights leave.
+
+    The effective sample is Kish's, the squared sum of the weights over the sum of
+    their squares, at the current run's 2026 weights times each set's factors.
+    """
+    current = load(work, "baseline", PRIMARY_YEAR)
+    weight = current["household.household_weight"].astype(float)
+
+    def effective_sample(weights: np.ndarray) -> float:
+        return float(weights.sum() ** 2 / (weights**2).sum())
+
+    rows = [
+        {
+            "weights": "todays_data",
+            "smallest_factor": 1.0,
+            "largest_factor": 1.0,
+            "effective_sample_of_households": effective_sample(weight),
+        }
+    ]
+    for label, path in factors.items():
+        saved = read_factors(path)
+        if not np.array_equal(saved["household_id"], current["household.household_id"]):
+            raise AssertionError(f"{label}: the factors fit other households")
+        rows.append(
+            {
+                "weights": label,
+                "smallest_factor": float(saved["factor"].min()),
+                "largest_factor": float(saved["factor"].max()),
+                "effective_sample_of_households": effective_sample(
+                    weight * saved["factor"]
+                ),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def deciles_by_weights(weights: dict[str, Path]) -> pd.DataFrame:
     """The bonus by decile on each set of weights, ranked at those weights."""
     return pd.concat(
@@ -1564,6 +1601,7 @@ TEXT_COLUMNS = {
     "provisions_2026": {"provision", "path"},
     "reweighted_budget_by_year": {"year", "weights"},
     "versus_reeves_estimate": {"line"},
+    "weight_factors": {"weights"},
 }
 
 
@@ -1661,6 +1699,7 @@ def main(
             -indexed["budget_by_year"]["bonus_income_tax"],
         ),
         "deciles_by_weights_2026": deciles_by_weights(weights),
+        "weight_factors": weight_factor_summary(work, factors),
         "deciles_by_data_file_2026": deciles_by_data_file(ecps, cps, work),
         "cps_sampling_spread_2026": sampling_spread(cps),
     }

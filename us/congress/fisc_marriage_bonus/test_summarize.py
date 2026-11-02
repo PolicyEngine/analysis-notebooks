@@ -48,6 +48,7 @@ from summarize import (
     sampling_spread,
     spm_unit_totals,
     versus_reeves,
+    weight_factor_summary,
 )
 
 N = 60
@@ -774,6 +775,7 @@ class TestMain:
             "deciles_by_data_file",
             "deciles_by_weights",
             "sampling_spread",
+            "weight_factor_summary",
         ):
             monkeypatch.setattr(summarize, name, lambda *args: empty)
         monkeypatch.setattr(
@@ -888,6 +890,36 @@ class TestReweightedRun:
         save(folder, "fisc", run)
         with pytest.raises(AssertionError, match="dropped an array"):
             check_reweighted_run(work, folder, factors, "set")
+
+
+class TestWeightFactors:
+    def test_a_uniform_factor_keeps_the_effective_sample(self, reweighted_run):
+        work, _, factors = reweighted_run
+        table = weight_factor_summary(work, {"set": factors}).set_index("weights")
+        assert table.loc["set", "largest_factor"] == FACTOR
+        assert table.loc["set", "smallest_factor"] == FACTOR
+        assert table.loc["set", "effective_sample_of_households"] == pytest.approx(
+            table.loc["todays_data", "effective_sample_of_households"]
+        )
+
+    def test_one_heavy_household_shrinks_the_effective_sample(self, reweighted_run):
+        work, _, factors = reweighted_run
+        household_ids = load(work, "fisc", PRIMARY_YEAR)["household.household_id"]
+        heavy = np.ones(N)
+        heavy[0] = 50.0
+        np.savez(factors, household_id=household_ids, factor=heavy)
+        table = weight_factor_summary(work, {"set": factors}).set_index("weights")
+        assert table.loc["set", "largest_factor"] == 50
+        assert (
+            table.loc["set", "effective_sample_of_households"]
+            < (table.loc["todays_data", "effective_sample_of_households"])
+        )
+
+    def test_factors_for_other_households_raise(self, reweighted_run):
+        work, _, factors = reweighted_run
+        np.savez(factors, household_id=np.arange(N)[::-1], factor=np.ones(N))
+        with pytest.raises(AssertionError, match="other households"):
+            weight_factor_summary(work, {"set": factors})
 
 
 class TestReweightedDecade:

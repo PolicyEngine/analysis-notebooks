@@ -1185,6 +1185,12 @@ class TestBonusReach:
         lines = versus_reeves(work).set_index("line").value
         assert bonus_reach(work).bonus.sum() == pytest.approx(lines["modelled_bonus"])
 
+    def test_only_units_the_bonus_pays_count_as_receiving(self, runs):
+        work, _ = runs
+        table = bonus_reach(work)
+        assert (table.units_receiving_the_bonus <= table.joint_units_with_a_child).all()
+        assert ((table.bonus > 0) <= (table.units_receiving_the_bonus > 0)).all()
+
     def test_a_tax_unit_across_two_households_fails(self, runs):
         work, _ = runs
         no_bonus = fake_run(0.0)

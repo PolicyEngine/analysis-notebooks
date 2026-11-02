@@ -959,6 +959,7 @@ def bonus_reach(work: Path) -> pd.DataFrame:
             "statutory_bonus": weight * base * joint * STATUTORY_BONUS_RATE,
             "bonus_lost_to_phase_out": weight * to_phase_out,
             "bonus_lost_to_agi_cap": weight * to_cap,
+            "units_receiving_the_bonus": weight * (fisc[CREDIT] > no_bonus[CREDIT]),
             "bonus": weight * (fisc[CREDIT] - no_bonus[CREDIT]),
         }
     )

@@ -43,7 +43,7 @@ These rows use the current dataset and rank households on current-law household 
 | 9 | $2.89B | 8.4% | 18.9% | $269 | 0.11% |
 | 10 | $0.74B | 2.2% | 4.5% | $66 | 0.01% |
 
-The bonus reaches 24.0 million tax units and 23.9 million of 124.6 million households, and a receiving tax unit gets $1,429 on average.
+The bonus reaches 24.0 million tax units and 23.9 million of 124.6 million households, and a receiving tax unit gets $1,429 on average. `results/bonus_reach_2026.csv` counts the receiving tax units by decile.
 
 These rows move with the data. The bottom five deciles receive 50.1 percent of the bonus in the current dataset, 39.4 percent in the CPS and 36.2 percent in the March 2025 file, and the top three receive 22.9, 30.4 and 38.0 percent. `results/deciles_by_data_file_2026.csv` and `results/deciles_by_weights_2026.csv` hold the decile rows for every file and set of weights.
 
@@ -315,7 +315,7 @@ The local runs and the API use the same bundle. Local and API reform differences
 
 - The estimates hold earnings, marriage, fertility and filing behaviour fixed. They say nothing about whether the bonus would change who marries.
 - The model reads "married" as filing jointly, so a married couple filing separately gets no bonus, and neither does an unmarried couple raising a child together.
-- The model can file jointly where the file records no marriage. It makes the oldest adult other than the head the tax unit's spouse, whatever the person's marital status, and it does not read the file's `tax_unit_role_input` ([PolicyEngine/policyengine-us#9868](https://github.com/PolicyEngine/policyengine-us/issues/9868), [PolicyEngine/microcosm#1027](https://github.com/PolicyEngine/microcosm/issues/1027)). On the current dataset, 1,162 records with a combined 2026 weight of 3.3 million file jointly in the model, and the file lists them as head of household or surviving spouse returns. They receive $0.62 billion of the $34.29 billion bonus. The adult the model picks has never married on 1,046 of those records, and their weighted median age runs 27. In the other direction, the file lists 53 records as joint and the model does not, which would add $0.11 billion at the model's joint limits. The net overstatement comes to about $0.51 billion on the current weights.
+- The model can file jointly where the file records no marriage. It makes the oldest adult other than the head the tax unit's spouse, whatever the person's marital status, and it does not read the file's `tax_unit_role_input` ([PolicyEngine/policyengine-us#9868](https://github.com/PolicyEngine/policyengine-us/issues/9868), [PolicyEngine/microcosm#1027](https://github.com/PolicyEngine/microcosm/issues/1027)). On the current dataset, 1,162 records with a combined 2026 weight of 3.3 million file jointly in the model, and the file lists them as head of household or surviving spouse returns. They receive $0.62 billion of the $34.29 billion bonus. The adult the model picks has never married on 1,046 of those records, and their weighted median age runs 27. In the other direction, the file lists 53 records as joint and the model does not, which would add $0.11 billion at the model's joint limits. The net overstatement comes to about $0.51 billion on the current weights. `filing_roles.py` reads the file's statuses and roles beside the 2026 runs and writes these lines to `results/filing_roles_2026.csv`.
 - The bill pays monthly on application to the Social Security Administration. The model pays an annual credit to every eligible tax unit, with no take-up rate.
 - The bill tests AGI from the most recently ended taxable year, and the model tests the current year.
 - The bill counts citizen, national or permanent resident children. The model has no such test, so it pays for some children the bill excludes.
@@ -368,6 +368,12 @@ uv run us/congress/fisc_marriage_bonus/filing_benchmark.py 2024 --out work
 
 ```bash
 uv run us/congress/fisc_marriage_bonus/relationship.py work
+```
+
+`filing_roles.py` sets the file's own filing statuses beside the current dataset's 2026 runs:
+
+```bash
+uv run us/congress/fisc_marriage_bonus/filing_roles.py work
 ```
 
 ```bash

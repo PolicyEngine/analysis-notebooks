@@ -929,7 +929,8 @@ class TestReweightedDecade:
         (work / f"fisc_{PRIMARY_YEAR}.json").write_text(json.dumps({"bundle": BUNDLE}))
         for scenario in ("fisc", "fisc_no_bonus"):
             arrays = load(work, scenario, PRIMARY_YEAR)
-            np.savez(work / f"{scenario}_{summarize.LAST_YEAR}.npz", **arrays)
+            for year in (summarize.MIDDLE_YEAR, summarize.LAST_YEAR):
+                np.savez(work / f"{scenario}_{year}.npz", **arrays)
         folder = tmp_path / "decade"
         folder.mkdir()
 
@@ -1007,7 +1008,12 @@ class TestReweightedDecade:
     @pytest.mark.parametrize("scale", [1.0, 1.25, 0.0])
     @pytest.mark.parametrize(
         ("year", "message"),
-        [(2033, "strays from"), (2035, "misses the current run")],
+        [
+            (2028, "strays from"),
+            (2033, "strays from"),
+            (2031, "misses the current run"),
+            (2035, "misses the current run"),
+        ],
     )
     def test_a_year_at_other_weights_raises(self, decade, scale, year, message):
         *_, totals, save_year = decade

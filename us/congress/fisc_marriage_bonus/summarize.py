@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+from itertools import pairwise
 from pathlib import Path
 
 import numpy as np
@@ -77,6 +78,10 @@ CAREGIVER_AGE = 18
 PRIMARY_YEAR = 2026
 LAST_YEAR = 2035
 CHECK_YEARS = (PRIMARY_YEAR, LAST_YEAR)
+# The current run also saved arrays for a middle year, so each reweighted decade
+# checks three years against those arrays and the years between against them.
+MIDDLE_YEAR = 2031
+ARRAY_YEARS = (PRIMARY_YEAR, MIDDLE_YEAR, LAST_YEAR)
 CREDIT = "tax_unit.family_income_supplement_credit"
 BASE = "tax_unit.family_income_supplement_credit_base_amount"
 HOUSEHOLD_CREDIT = "household.family_income_supplement_credit"
@@ -1461,14 +1466,20 @@ def check_arrays_behind_the_decade(
 
 
 def check_years_between(table: pd.DataFrame, current_bonus: pd.Series) -> None:
-    """Years with no saved arrays must hold this set's ratio to the current bonus."""
+    """Years with no saved arrays must hold this set's ratio to the current bonus.
+
+    Each year must sit within the margin of the range its two nearest checked years
+    span.
+    """
     ratio = table["bonus"] / current_bonus.loc[list(YEARS)]
-    ends = ratio.loc[list(CHECK_YEARS)]
-    if (
-        ratio.min() < ends.min() - YEAR_RATIO_MARGIN
-        or ratio.max() > ends.max() + YEAR_RATIO_MARGIN
-    ):
-        raise AssertionError("a year strays from the current run at these weights")
+    for start, end in pairwise(ARRAY_YEARS):
+        ends = ratio.loc[[start, end]]
+        between = ratio.loc[[year for year in YEARS if start <= year <= end]]
+        if (
+            between.min() < ends.min() - YEAR_RATIO_MARGIN
+            or between.max() > ends.max() + YEAR_RATIO_MARGIN
+        ):
+            raise AssertionError("a year strays from the current run at these weights")
 
 
 def reweighted_decade(
@@ -1481,7 +1492,7 @@ def reweighted_decade(
     """Each year's bonus on one set of weights, from decade.py's two runs a year.
 
     Every year must record the sha256 of this set's factor file. The current run
-    saved arrays for 2026 and 2035, so those years must match them at these
+    saved arrays for 2026, 2031 and 2035, so those years must match them at these
     factors, bonus included. The other years must hold the set's ratio to the
     current bonus, which catches a year run on another reform or with the wrong
     weights unless its ratio lands within the margin.
@@ -1499,7 +1510,7 @@ def reweighted_decade(
             raise AssertionError(f"{year}: the decade run used other factors")
         totals = decade_year["totals"]
         fisc, no_bonus = totals["fisc"], totals["fisc_no_bonus"]
-        if year in CHECK_YEARS:
+        if year in ARRAY_YEARS:
             check_arrays_behind_the_decade(year, totals, work, saved)
         bonus = (
             fisc["family_income_supplement_credit"]

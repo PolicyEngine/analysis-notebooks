@@ -41,6 +41,8 @@ def small_run() -> dict[str, np.ndarray]:
         "person.is_household_head": np.array([1, 0, 0, 0, 1, 0], dtype=bool),
         "person.is_tax_unit_dependent": np.array([0, 0, 1, 0, 0, 1], dtype=bool),
         "tax_unit.income_tax": np.array([9_000.0, 0.0, 500.0]),
+        # Householder, wife, own child, lodger; householder, own child.
+        "person.cps_relationship": np.array([1, 4, 5, 14, 1, 5]),
     }
 
 
@@ -181,6 +183,35 @@ def test_family_income_bands_hold_each_married_household_with_a_child_once():
     assert result["married_own_child_income_100000_to_200000"] == 2
 
 
+def test_the_relationship_rows_read_the_survey_codes():
+    run = small_run()
+    # The model files the couple separately, and the survey still shows a wife.
+    run["tax_unit.filing_status"] = np.array(["SEPARATE", "SINGLE", "SINGLE"])
+    result = measures(run)
+    assert result["married_couple_households"] == 0
+    assert result["married_couple_households_by_relationship"] == 2
+    assert result["married_couple_households_with_own_child_by_relationship"] == 2
+    assert result["children_in_married_couple_households_by_relationship"] == 2
+    assert result[
+        "share_of_children_in_married_couple_households_by_relationship"
+    ] == pytest.approx(2 / 5)
+    # The couple's unit and the lodger's add to $129,000 of household AGI.
+    assert result["married_own_child_income_100000_to_200000_by_relationship"] == 2
+    assert result["married_own_child_income_under_25000_by_relationship"] == 0
+
+
+def test_a_file_without_codes_leaves_the_relationship_rows_blank():
+    plain = small_run()
+    del plain["person.cps_relationship"]
+    table = benchmark_table({"plain": plain, "coded": small_run()})
+    rows = table[table["measure"].str.endswith("_by_relationship")]
+    assert len(rows) == 4 + len(MARRIED_OWN_CHILD_FAMILIES_BY_INCOME)
+    assert rows["plain"].isna().all()
+    assert rows["coded"].notna().all()
+    others = table[~table["measure"].str.endswith("_by_relationship")]
+    assert others["plain"].equals(others["coded"])
+
+
 def test_every_benchmark_names_a_measure_the_run_produces():
     produced = measures(small_run())
     assert {item.measure for item in BENCHMARKS} <= set(produced)
@@ -203,7 +234,15 @@ def test_household_factors_reach_the_tax_units_inside_each_household():
 
 def test_a_file_spec_can_carry_factors(tmp_path):
     arrays = small_run()
+    codes = arrays.pop("person.cps_relationship")
     np.savez(tmp_path / "filing_2024.npz", **arrays)
+    np.savez(
+        tmp_path / "relationship_2024.npz",
+        **{
+            "person.person_household_id": arrays["person.person_household_id"],
+            "person.cps_relationship": codes,
+        },
+    )
     np.savez(
         tmp_path / "f.npz",
         household_id=arrays["household.household_id"],
@@ -212,6 +251,7 @@ def test_a_file_spec_can_carry_factors(tmp_path):
     name, run = load_file(f"doubled={tmp_path},{tmp_path / 'f.npz'}")
     assert name == "doubled"
     assert measures(run)["households"] == 2 * measures(arrays)["households"]
+    assert run["person.cps_relationship"].tolist() == codes.tolist()
     assert load_file(f"plain={tmp_path}")[1]["household.household_weight"].sum() == 5
 
 

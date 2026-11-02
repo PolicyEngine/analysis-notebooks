@@ -13,6 +13,11 @@ needs, and the output lands in results/benchmarks_2024.csv.
 
 Published years differ from the 2024 runs where the source stops earlier: the
 IRS tables cover tax year 2023, and the advance child credit covers 2021.
+
+The household rows count married couples twice: once by the head's joint filing,
+which every file has, and once by the survey's relationship codes, which only the
+current dataset keeps and which the reweighting targets. A file without the codes
+leaves those rows blank.
 """
 
 from __future__ import annotations
@@ -35,6 +40,8 @@ from reweight import (
     household_moments,
     household_position,
     load_factors,
+    load_filing_run,
+    relationship_moments,
 )
 
 RESULTS = Path(__file__).parent / "results"
@@ -86,21 +93,52 @@ BENCHMARKS = (
         "now married (B13002_003E of B13002_002E), measured at the interview",
     ),
     Benchmark("households", 132_737_146, "acs", "B11001_001E"),
-    Benchmark("married_couple_households", 61_980_084, "acs", "B11001_003E"),
+    Benchmark(
+        "married_couple_households",
+        61_980_084,
+        "acs",
+        "B11001_003E; the model side asks whether the head files jointly",
+    ),
     Benchmark(
         "married_couple_households_with_own_child",
         22_978_636,
         "acs",
-        "B11003_003E; the 2020 Census counted 22,284,317 (P20_003N)",
+        "B11003_003E; the 2020 Census counted 22,284,317 (P20_003N); the model "
+        "side counts the joint head's dependents under 18",
     ),
     Benchmark(
         "children_in_married_couple_households",
         48_553_644,
         "acs",
-        "B09005_002E of 72,736,534",
+        "B09005_002E of 72,736,534; the model side counts every child in a "
+        "joint head's household",
     ),
     Benchmark(
         "share_of_children_in_married_couple_households",
+        48_553_644 / 72_736_534,
+        "acs",
+        "B09005_002E over B09005_001E",
+    ),
+    Benchmark(
+        "married_couple_households_by_relationship",
+        61_980_084,
+        "acs",
+        "B11001_003E; a spouse of the householder, from the survey's codes",
+    ),
+    Benchmark(
+        "married_couple_households_with_own_child_by_relationship",
+        22_978_636,
+        "acs",
+        "B11003_003E; the householder's own child under 18, from the survey's codes",
+    ),
+    Benchmark(
+        "children_in_married_couple_households_by_relationship",
+        48_553_644,
+        "acs",
+        "B09005_002E; children other than householders and spouses",
+    ),
+    Benchmark(
+        "share_of_children_in_married_couple_households_by_relationship",
         48_553_644 / 72_736_534,
         "acs",
         "B09005_002E over B09005_001E",
@@ -149,8 +187,8 @@ BENCHMARKS = (
         "children_outside_joint_units",
         22_346_185 + 3_362_687 + 63_776,
         "advance",
-        "A floor: head of household, single and widow(er) recipients, before "
-        "any child outside the payments",
+        "Head of household, single and widow(er) recipients; leaves out families "
+        "with no payment and takes filing status from the 2019 or 2020 return",
     ),
     *(
         Benchmark(
@@ -165,11 +203,46 @@ BENCHMARKS = (
         Benchmark(f"married_own_child_income_{label}", families, "acs", "B19131")
         for label, _, _, families in MARRIED_OWN_CHILD_FAMILIES_BY_INCOME
     ),
+    *(
+        Benchmark(
+            f"married_own_child_income_{label}_by_relationship",
+            families,
+            "acs",
+            "B19131; the householder's own child, from the survey's codes",
+        )
+        for label, _, _, families in MARRIED_OWN_CHILD_FAMILIES_BY_INCOME
+    ),
 )
 
 
 def weighted_count(mask: np.ndarray, weights: np.ndarray) -> float:
     return float(weights @ mask.astype(float))
+
+
+def relationship_measures(run: dict[str, np.ndarray]) -> dict[str, float]:
+    """The ACS household rows from the survey's codes, blank for a file without them."""
+    names = (
+        "married_couple_households",
+        "married_couple_households_with_own_child",
+        "children_in_married_couple_households",
+        "share_of_children_in_married_couple_households",
+        *(
+            f"married_own_child_income_{label}"
+            for label, _, _, _ in MARRIED_OWN_CHILD_FAMILIES_BY_INCOME
+        ),
+    )
+    if "person.cps_relationship" not in run:
+        return {f"{name}_by_relationship": np.nan for name in names}
+    weight = run["household.household_weight"].astype(float)
+    # The same household moments calibrate solves on, income bands included.
+    moments = household_moments(run) | relationship_moments(run)
+    moments |= family_income_moments(moments)
+    counts = {name: float(weight @ values) for name, values in moments.items()}
+    counts["share_of_children_in_married_couple_households"] = (
+        counts["children_in_married_couple_households"]
+        / counts["children_in_households"]
+    )
+    return {f"{name}_by_relationship": counts[name] for name in names}
 
 
 def measures(run: dict[str, np.ndarray]) -> dict[str, float]:
@@ -230,6 +303,7 @@ def measures(run: dict[str, np.ndarray]) -> dict[str, float]:
             @ in_households["children_in_married_couple_households"]
             / (household_weight @ in_households["children_under_18"])
         ),
+        **relationship_measures(run),
         "children_in_married_tax_units": float(child_weight @ married),
         "share_of_children_in_married_tax_units": float(
             child_weight @ married / child_weight.sum()
@@ -289,11 +363,6 @@ def benchmark_table(runs: dict[str, dict[str, np.ndarray]]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def load_run(work: Path) -> dict[str, np.ndarray]:
-    with np.load(work / "filing_2024.npz") as saved:
-        return {name: saved[name] for name in saved.files}
-
-
 def with_weight_factors(
     run: dict[str, np.ndarray], factors: np.ndarray
 ) -> dict[str, np.ndarray]:
@@ -317,7 +386,7 @@ def load_file(spec: str) -> tuple[str, dict[str, np.ndarray]]:
     """Read name=work-dir, or name=work-dir,factors.npz for reweighted runs."""
     name, paths = spec.split("=", 1)
     work, _, factors = paths.partition(",")
-    run = load_run(Path(work))
+    run = load_filing_run(Path(work))
     if not factors:
         return name, run
     household_ids, weight_factors = load_factors(Path(factors))

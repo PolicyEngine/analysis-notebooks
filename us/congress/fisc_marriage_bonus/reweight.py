@@ -16,6 +16,10 @@ reform on those weights, so every figure from them comes from a full run.
 The dataset's own 2024 income and income tax totals stay fixed, so the weights
 move family structure and filing without moving those totals. People's incomes
 and family records stay as they are, and tax unit totals move with the weights.
+
+The ACS sorts households by the householder's relationships, so the household
+targets read the survey's relationship codes, which relationship.py saves beside
+the run. The IRS targets read the model's filing status, as the IRS counts returns.
 """
 
 from __future__ import annotations
@@ -78,6 +82,12 @@ MARRIED_RETURNS_BY_AGI = (
     ("200000_to_500000", 200_000.0, 500_000.0, 8_960_113 + 123_766),
     ("500000_or_more", 500_000.0, np.inf, 2_171_373 + 39_401),
 )
+
+# The 2024 ASEC's A_EXPRRP codes each person's relationship to the household's
+# reference person, whom the Census Bureau counts as the householder.
+REFERENCE_PERSON_CODES = (1, 2)
+SPOUSE_CODES = (3, 4)
+OWN_CHILD_CODE = 5
 
 MAX_NEWTON_STEPS = 200
 TARGET_TOLERANCE = 1e-9
@@ -164,7 +174,11 @@ def filer_moments(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
 
 
 def household_moments(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
-    """Count what each target measures in each household, at weight one."""
+    """Count what each target measures in each household, at weight one.
+
+    The household types here follow the head's joint filing, which the benchmarks
+    compare across files. calibrate takes them from relationship_moments instead.
+    """
     household_ids = run["household.household_id"]
     households = household_ids.size
     person_household = household_position(
@@ -212,6 +226,40 @@ def household_moments(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
             run["tax_unit.adjusted_gross_income"].astype(float)
         ),
         "income_tax": unit_sum(run["tax_unit.income_tax"].astype(float)),
+    }
+
+
+def relationship_moments(run: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """Count the ACS household types from the survey's relationship codes.
+
+    A married-couple household holds the householder's spouse, and an own child is
+    the householder's child by birth, marriage or adoption. Children in households
+    leave out householders and spouses, as table B09005 does.
+    """
+    if "person.cps_relationship" not in run:
+        raise ValueError("the run has no relationship codes: run relationship.py")
+    household_ids = run["household.household_id"]
+    person_household = household_position(
+        household_ids, run["person.person_household_id"]
+    )
+    code = run["person.cps_relationship"]
+    young = run["person.age"] < 18
+
+    def per_household(values: np.ndarray) -> np.ndarray:
+        return np.bincount(
+            person_household, weights=values.astype(float), minlength=household_ids.size
+        )
+
+    married = per_household(np.isin(code, SPOUSE_CODES)) > 0
+    own_child = per_household(young & (code == OWN_CHILD_CODE)) > 0
+    children = per_household(
+        young & ~np.isin(code, REFERENCE_PERSON_CODES + SPOUSE_CODES)
+    )
+    return {
+        "married_couple_households": married.astype(float),
+        "married_couple_households_with_own_child": (married & own_child).astype(float),
+        "children_in_households": children,
+        "children_in_married_couple_households": children * married,
     }
 
 
@@ -344,6 +392,21 @@ def load_factors(path: Path) -> tuple[np.ndarray, np.ndarray]:
     return household_ids, factors
 
 
+def load_filing_run(work: Path) -> dict[str, np.ndarray]:
+    """A file's 2024 run, with the relationship codes if relationship.py saved them."""
+    with np.load(work / "filing_2024.npz") as saved:
+        run = {name: saved[name] for name in saved.files}
+    codes = work / "relationship_2024.npz"
+    if codes.exists():
+        with np.load(codes) as saved:
+            if not np.array_equal(
+                saved["person.person_household_id"], run["person.person_household_id"]
+            ):
+                raise ValueError(f"{codes} lists other people than the run")
+            run["person.cps_relationship"] = saved["person.cps_relationship"]
+    return run
+
+
 def apply_weight_factors(sim, year: int, path: Path) -> None:
     """Multiply each household's weight for this year by its saved factor."""
     household_ids, factors = load_factors(path)
@@ -365,7 +428,7 @@ def calibrate(
     child_credit: bool = False,
     filers: bool = False,
 ) -> Calibration:
-    moments = household_moments(run)
+    moments = household_moments(run) | relationship_moments(run)
     if detailed:
         moments |= family_income_moments(moments)
     if child_credit:
@@ -407,8 +470,7 @@ if __name__ == "__main__":
         help="Also match IRS returns in total, by head of household and by AGI.",
     )
     args = parser.parse_args()
-    with np.load(args.work / "filing_2024.npz") as saved:
-        run = {name: saved[name] for name in saved.files}
+    run = load_filing_run(args.work)
     result = calibrate(run, args.detailed, args.child_credit, args.filers)
     np.savez_compressed(
         args.factors,

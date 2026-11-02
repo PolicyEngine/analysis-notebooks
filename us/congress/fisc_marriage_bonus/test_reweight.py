@@ -28,7 +28,9 @@ from reweight import (
     filer_moments,
     household_moments,
     household_position,
+    load_filing_run,
     published_targets,
+    relationship_moments,
 )
 
 
@@ -46,6 +48,8 @@ def small_run() -> dict[str, np.ndarray]:
         "person.age": np.array([40, 38, 4, 30, 12, 70]),
         "person.is_household_head": np.array([1, 0, 0, 1, 0, 1], dtype=bool),
         "person.is_tax_unit_dependent": np.array([0, 0, 1, 0, 1, 0], dtype=bool),
+        # Householder, wife, own child; householder, own child; householder alone.
+        "person.cps_relationship": np.array([1, 4, 5, 1, 5, 2]),
     }
 
 
@@ -116,6 +120,108 @@ def test_a_one_year_old_is_not_an_infant():
     run = small_run()
     run["person.age"] = np.array([40, 38, 1, 30, 0, 70])
     assert household_moments(run)["children_under_1"].tolist() == [0, 0, 1]
+
+
+def test_relationship_moments_follow_each_household_whatever_the_row_order():
+    moments = relationship_moments(small_run())
+    assert moments["married_couple_households"].tolist() == [0, 1, 0]
+    assert moments["married_couple_households_with_own_child"].tolist() == [0, 1, 0]
+    assert moments["children_in_households"].tolist() == [0, 1, 1]
+    assert moments["children_in_married_couple_households"].tolist() == [0, 1, 0]
+
+
+def test_a_spouse_makes_a_married_couple_household_whatever_the_filing():
+    run = small_run()
+    run["tax_unit.filing_status"] = np.array(["SINGLE", "SEPARATE", "SINGLE"])
+    assert household_moments(run)["married_couple_households"].tolist() == [0, 0, 0]
+    assert relationship_moments(run)["married_couple_households"].tolist() == [0, 1, 0]
+
+
+def test_parents_who_live_with_their_child_householder_are_no_couple_household():
+    run = small_run()
+    # The 16-year-old is the reference person, and the couple are their parents.
+    run["person.age"] = np.array([59, 58, 16, 30, 12, 70])
+    run["person.cps_relationship"] = np.array([8, 8, 1, 1, 5, 2])
+    moments = relationship_moments(run)
+    assert moments["married_couple_households"].tolist() == [0, 0, 0]
+    assert moments["children_in_households"].tolist() == [0, 0, 1]
+
+
+def test_a_grandchild_counts_among_children_but_is_no_own_child():
+    run = small_run()
+    run["person.cps_relationship"] = np.array([1, 4, 7, 1, 5, 2])
+    moments = relationship_moments(run)
+    assert moments["married_couple_households"].tolist() == [0, 1, 0]
+    assert moments["married_couple_households_with_own_child"].tolist() == [0, 0, 0]
+    assert moments["children_in_married_couple_households"].tolist() == [0, 1, 0]
+
+
+def test_a_householder_or_spouse_under_18_is_not_counted_among_children():
+    run = small_run()
+    run["person.age"] = np.array([17, 17, 1, 17, 12, 70])
+    run["person.cps_relationship"] = np.array([1, 3, 5, 1, 5, 2])
+    moments = relationship_moments(run)
+    assert moments["children_in_households"].tolist() == [0, 1, 1]
+    assert moments["children_in_married_couple_households"].tolist() == [0, 1, 0]
+
+
+def test_a_run_without_relationship_codes_cannot_calibrate():
+    run = small_run()
+    del run["person.cps_relationship"]
+    with pytest.raises(ValueError, match="relationship.py"):
+        calibrate(run)
+
+
+def test_the_solve_counts_households_by_the_codes_and_returns_by_filing(
+    monkeypatch,
+):
+    seen = {}
+
+    def keep_every_weight(weights, moments, targets):
+        seen.update(moments=moments)
+        return np.ones(weights.size)
+
+    monkeypatch.setattr("reweight.entropy_balance", keep_every_weight)
+    run = with_filers(with_credits(small_run()))
+    run["tax_unit.filing_status"] = np.array(["SINGLE", "SINGLE", "SINGLE"])
+    result = calibrate(run, detailed=True, child_credit=True, filers=True)
+    row = dict(zip(result.targets, seen["moments"]))
+    assert row["married_couple_households"].tolist() == [0, 1, 0]
+    # with_filers gives the couple's unit an AGI of $120,000.
+    assert row["married_own_child_income_100000_to_200000"].tolist() == [0, 1, 0]
+    assert row["joint_returns_with_child_credit"].tolist() == [0, 0, 0]
+
+
+def test_a_run_picks_up_the_codes_saved_beside_it(tmp_path):
+    arrays = small_run()
+    codes = arrays.pop("person.cps_relationship")
+    np.savez(tmp_path / "filing_2024.npz", **arrays)
+    assert "person.cps_relationship" not in load_filing_run(tmp_path)
+    np.savez(
+        tmp_path / "relationship_2024.npz",
+        **{
+            "person.person_household_id": arrays["person.person_household_id"],
+            "person.cps_relationship": codes,
+        },
+    )
+    assert load_filing_run(tmp_path)["person.cps_relationship"].tolist() == (
+        codes.tolist()
+    )
+
+
+def test_codes_saved_for_other_people_raise(tmp_path):
+    arrays = small_run()
+    codes = arrays.pop("person.cps_relationship")
+    np.savez(tmp_path / "filing_2024.npz", **arrays)
+    np.savez(
+        tmp_path / "relationship_2024.npz",
+        **{
+            "person.person_household_id": arrays["person.person_household_id"][::-1],
+            "person.cps_relationship": codes,
+        },
+    )
+    with pytest.raises(ValueError, match="other people"):
+        load_filing_run(tmp_path)
 
 
 def test_income_bands_split_married_households_with_a_child_and_no_others():
@@ -283,6 +389,10 @@ def many_households(size: int = 3000) -> dict[str, np.ndarray]:
     last = head + people - 1
     age[last[other_adult]] = 30
     adult[last[other_adult]] = True
+    code = np.full(people.sum(), 5)
+    code[head] = 1
+    code[spouses] = 3
+    code[last[other_adult]] = 12
     return {
         "household.household_id": np.arange(size),
         "household.household_weight": generator.uniform(1.5e4, 4.5e4, size),
@@ -297,6 +407,7 @@ def many_households(size: int = 3000) -> dict[str, np.ndarray]:
         "person.age": age,
         "person.is_household_head": is_head,
         "person.is_tax_unit_dependent": ~adult,
+        "person.cps_relationship": code,
     }
 
 

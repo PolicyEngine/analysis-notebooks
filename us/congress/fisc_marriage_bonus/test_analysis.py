@@ -141,6 +141,8 @@ class TestBonusLostToLimits:
 
 
 class TestDecileTable:
+    # Host load can push one example past Hypothesis's 200 ms default.
+    @settings(deadline=None)
     @given(households())
     def test_rows_sum_to_the_aggregate(self, hh):
         groups = weighted_decile(hh["income"], hh["weight"], hh["people"])
@@ -149,6 +151,7 @@ class TestDecileTable:
         assert table.dollars.sum() == pytest.approx(aggregate, rel=1e-9, abs=1e-6)
         assert table.households.sum() == pytest.approx(hh["weight"].sum(), rel=1e-9)
 
+    @settings(deadline=None)
     @given(households())
     def test_shares_sum_to_one_when_any_dollars_flow(self, hh):
         groups = weighted_decile(hh["income"], hh["weight"], hh["people"])
@@ -156,12 +159,14 @@ class TestDecileTable:
         if table.dollars.sum() > 0:
             assert table.share_of_total.sum() == pytest.approx(1)
 
+    @settings(deadline=None)
     @given(households())
     def test_receipt_shares_are_proportions(self, hh):
         groups = weighted_decile(hh["income"], hh["weight"], hh["people"])
         table = decile_table(groups, hh["amount"], hh["income"], hh["weight"])
         assert table.share_of_households_receiving.between(0, 1).all()
 
+    @settings(deadline=None)
     @given(households())
     def test_groups_are_ordered_by_income(self, hh):
         groups = weighted_decile(hh["income"], hh["weight"], hh["people"])
@@ -169,6 +174,7 @@ class TestDecileTable:
         order = np.argsort(hh["income"][ranked], kind="stable")
         assert (np.diff(groups[ranked][order]) >= 0).all()
 
+    @settings(deadline=None)
     @given(households())
     def test_negative_incomes_take_their_own_group(self, hh):
         groups = weighted_decile(hh["income"], hh["weight"], hh["people"])

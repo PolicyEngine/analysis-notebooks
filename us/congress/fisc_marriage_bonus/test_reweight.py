@@ -22,6 +22,7 @@ from reweight import (
     HEAD_OF_HOUSEHOLD_RETURNS_2023,
     MARRIED_OWN_CHILD_FAMILIES_BY_INCOME,
     MARRIED_RETURNS_BY_AGI,
+    TARGET_TOLERANCE,
     apply_weight_factors,
     calibrate,
     child_credit_after_tax_limit,
@@ -664,6 +665,86 @@ def test_a_target_this_near_zero_must_be_zero(weights, moment, target):
     """Each tolerance falls below the rounding bound on its moment's sum."""
     with pytest.raises(ValueError, match="must be zero"), np.errstate(over="ignore"):
         entropy_balance(np.array(weights), np.array([moment]), np.array([target]))
+
+
+def test_underflow_cannot_hide_a_miss_on_a_zero_target():
+    """Both products underflow, so the computed sum reads zero against an exact
+    miss of a third of the moment's total."""
+    smallest = np.nextafter(0.0, 1.0)
+    weights = np.array([smallest, smallest])
+    moment = np.array([0.5, -0.25])
+    assert np.abs(moment) @ weights == 0
+    assert Fraction(0.25) / Fraction(0.75) == Fraction(1, 3)
+    with pytest.raises(ValueError, match="underflows"):
+        entropy_balance(weights, moment[None, :], np.array([0.0]))
+
+
+@pytest.mark.parametrize(
+    ("weights", "moment"),
+    [
+        # Every entry of the moment reads zero.
+        ([1.0, 1.0], [0.0, 0.0]),
+        # The moment touches only a record with no weight.
+        ([0.0, 1.0], [1.0, 0.0]),
+    ],
+)
+def test_a_zero_target_holds_where_no_weight_meets_the_moment(weights, moment):
+    """These sums read zero exactly, so no miss hides behind them."""
+    factors = entropy_balance(np.array(weights), np.array([moment]), np.array([0.0]))
+    assert np.array_equal(factors, np.ones(2))
+
+
+def test_a_zero_target_above_underflow_still_lands():
+    """The same moment at weights large enough to measure reaches its target."""
+    weights = np.array([1e-300, 1e-300])
+    moment = np.array([0.5, -0.25])
+    reweighted = weights * entropy_balance(weights, moment[None, :], np.array([0.0]))
+    total = sum(
+        abs(Fraction(float(m))) * Fraction(float(w)) for m, w in zip(moment, reweighted)
+    )
+    reached = sum(
+        Fraction(float(m)) * Fraction(float(w)) for m, w in zip(moment, reweighted)
+    )
+    assert abs(reached) < Fraction(TARGET_TOLERANCE) * total
+
+
+@settings(deadline=None)
+@given(
+    st.lists(
+        st.tuples(
+            st.floats(min_value=5e-324, max_value=1e-300),
+            st.floats(min_value=-2, max_value=2),
+        ),
+        min_size=2,
+        max_size=6,
+    )
+)
+def test_a_returned_zero_target_holds_in_exact_arithmetic(records):
+    """At any scale of weight, a solve that returns meets its target exactly enough:
+    in rationals, on the returned factors and on the weights a caller computes."""
+    weights, moment = (np.array(column) for column in zip(*records))
+    with np.errstate(all="ignore"):
+        try:
+            factors = entropy_balance(weights, moment[None, :], np.array([0.0]))
+        except ValueError:
+            return
+    tolerance = Fraction(TARGET_TOLERANCE)
+    rational = [Fraction(float(m)) for m in moment]
+    on_factors = [
+        Fraction(float(w)) * Fraction(float(f)) for w, f in zip(weights, factors)
+    ]
+    on_weights = [Fraction(float(w)) for w in weights * factors]
+    for reached in (on_factors, on_weights):
+        miss = abs(sum(m * w for m, w in zip(rational, reached)))
+        assert miss <= tolerance * sum(abs(m) * w for m, w in zip(rational, reached))
+
+
+def test_exhaustion_reads_the_rounding_where_the_solve_ended(monkeypatch):
+    """The first step clears the rounding bound, so the bound before it would call
+    this target too near zero. The target sits within reach, and the solve ran out."""
+    monkeypatch.setattr("reweight.MAX_NEWTON_STEPS", 1)
+    with pytest.raises(ValueError, match="did not reach"):
+        entropy_balance(np.array([5e6]), np.array([[1.0]]), np.array([1.0]))
 
 
 def test_balancing_refuses_targets_no_positive_weights_can_reach():

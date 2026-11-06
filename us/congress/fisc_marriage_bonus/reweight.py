@@ -353,15 +353,18 @@ def entropy_balance(
     which the step recomputes as the weights move. Summing n records rounds by at
     most n machine epsilons of that absolute total, plus n of the smallest
     subnormal where products underflow. The solve stops only when every miss plus
-    that bound falls within tolerance, so rounding cannot hide a miss. A nonzero
-    target whose tolerance the bound alone fills, where the solve ends, raises as
-    too near zero. The bound covers the worst case, so it also refuses some
-    targets the arithmetic happens to hit exactly.
+    that bound falls within tolerance, so rounding cannot hide a miss. A zero
+    target raises when its moment's absolute total underflows to zero on records
+    that carry weight, since nothing then measures the miss. A nonzero target
+    whose tolerance the bound alone fills, where the solve ends, raises as too
+    near zero. The bound covers the worst case, so it also refuses some targets
+    the arithmetic happens to hit exactly.
     """
     size = np.abs(targets)
     zero = size == 0
     records = moments.shape[1]
     machine = np.finfo(float)
+    carries_weight = np.any((moments != 0) & (weights != 0), axis=1)
 
     def check_resolvable(rounding: np.ndarray) -> None:
         if np.any(~zero & (rounding >= TARGET_TOLERANCE)):
@@ -376,12 +379,19 @@ def entropy_balance(
     def dual(point: np.ndarray) -> float:
         return float(weights @ factors_at(point) - point @ targets)
 
-    for _ in range(MAX_NEWTON_STEPS):
-        current = factors_at(multipliers) * weights
+    def measure(point: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """The weights at a point, each target's scale and its rounding bound."""
+        current = factors_at(point) * weights
         total = np.abs(moments) @ current
+        if np.any(zero & (total == 0) & carries_weight):
+            raise ValueError("a moment this small underflows at these weights")
         scale = np.where(zero, total, size)
         scale[scale == 0] = 1.0
         rounding = records * (machine.eps * total + machine.smallest_subnormal) / scale
+        return current, scale, rounding
+
+    for _ in range(MAX_NEWTON_STEPS):
+        current, scale, rounding = measure(multipliers)
 
         def gap_at(point: np.ndarray) -> np.ndarray:
             return (moments @ (factors_at(point) * weights) - targets) / scale
@@ -409,7 +419,7 @@ def entropy_balance(
                 check_resolvable(rounding)
                 raise ValueError("the line search stalled")
         multipliers = multipliers + step * direction
-    check_resolvable(rounding)
+    check_resolvable(measure(multipliers)[2])
     raise ValueError("entropy balancing did not reach the targets")
 
 

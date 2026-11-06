@@ -177,16 +177,20 @@ def weighted_decile(
     Follows the convention in household_income_decile: each decile holds about
     a tenth of people, households with negative income take group -1, and tied
     households all take the cumulative weight at the end of their tie, so they
-    share a group.
+    share a group. A household with no weight at or below its income takes group
+    0, and households with no weight at all raise, as in microdf's decile_rank.
     """
     income = np.asarray(income, dtype=float)
     weight = np.asarray(household_weight, dtype=float) * np.asarray(people, dtype=float)
+    total_weight = weight.sum()
+    if total_weight == 0:
+        raise ZeroDivisionError("households with no total weight have no rank")
     order = np.argsort(income, kind="stable")
     ranked = income[order]
     end_of_tie = np.searchsorted(ranked, ranked, side="right") - 1
     position = np.empty(len(income), dtype=float)
-    position[order] = np.cumsum(weight[order])[end_of_tie] / weight.sum()
-    groups = np.clip(np.ceil(position * 10), 1, 10).astype(int)
+    position[order] = np.cumsum(weight[order])[end_of_tie] / total_weight
+    groups = np.minimum(np.ceil(position * 10), 10).astype(int)
     return np.where(income < 0, NEGATIVE_INCOME_GROUP, groups)
 
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from hypothesis import given, settings
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
 from microdf import MicroSeries
@@ -156,6 +156,25 @@ def tied_households(draw):
     }
 
 
+@st.composite
+def zero_weight_households(draw):
+    """Tied households where many carry no weight, and at least one carries some."""
+    n = draw(SIZE)
+    weight = draw(
+        hnp.arrays(float, n, elements=st.sampled_from([0.0, 0.0, 1.0, 17.5, 5_000.0]))
+    )
+    assume(weight.sum() > 0)
+    return {
+        "income": draw(
+            hnp.arrays(
+                float, n, elements=st.sampled_from([-500.0, 0.0, 1e3, 2e3, 5e4, 7e5])
+            )
+        ),
+        "weight": weight,
+        "people": draw(hnp.arrays(int, n, elements=st.integers(1, 8))),
+    }
+
+
 class TestWeightedDecile:
     def test_a_tie_at_a_decile_line_lands_above_it(self):
         # The shares of the family income run's tie at the 70th percentile.
@@ -174,7 +193,9 @@ class TestWeightedDecile:
             assert np.unique(groups[hh["income"] == income]).size == 1
 
     @settings(deadline=None)
-    @given(st.one_of(households(), tied_households()))
+    @given(
+        st.one_of(households(), tied_households(), zero_weight_households()),
+    )
     def test_matches_the_ranking_the_model_uses(self, hh):
         # household_income_decile ranks with MicroSeries.decile_rank, then sets
         # negative incomes to their own group.
@@ -186,6 +207,21 @@ class TestWeightedDecile:
         )
         groups = weighted_decile(hh["income"], hh["weight"], hh["people"])
         assert np.array_equal(groups, expected)
+
+    def test_a_household_below_all_the_weight_takes_decile_zero(self):
+        # microdf's decile_rank clips only from above, so zero cumulative weight
+        # gives zero.
+        groups = weighted_decile(
+            np.array([0.0, 1.0]), np.array([0.0, 1.0]), np.array([1, 1])
+        )
+        assert groups.tolist() == [0, 10]
+
+    def test_households_with_no_weight_cannot_rank(self):
+        income, weight, people = np.array([0.0, 1.0]), np.zeros(2), np.array([1, 1])
+        with pytest.raises(ZeroDivisionError):
+            MicroSeries(income, weights=weight * people).decile_rank()
+        with pytest.raises(ZeroDivisionError):
+            weighted_decile(income, weight, people)
 
 
 class TestDecileTable:

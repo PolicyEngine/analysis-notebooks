@@ -640,6 +640,19 @@ class TestComparisonFile:
         with pytest.raises(AssertionError, match="a saved decile misses its income"):
             check_comparison_file(work, "file")
 
+    def test_a_zero_weight_household_must_keep_the_models_decile(self):
+        run = {
+            NET_INCOME: np.array([0.0, 1.0]),
+            "household.household_weight": np.array([0.0, 1.0]),
+            "household.household_count_people": np.array([1, 1]),
+            "household.equiv_household_net_income": np.array([0.0, 1.0]),
+            "household.household_income_decile": np.array([0, 10]),
+        }
+        summarize.check_saved_ranking(run, "file")
+        run["household.household_income_decile"] = np.array([1, 10])
+        with pytest.raises(AssertionError, match="a saved decile misses its income"):
+            summarize.check_saved_ranking(run, "file")
+
     def test_a_baseline_equivalised_income_off_its_definition_fails(self, runs):
         work, _ = runs
         current = fake_run(0.0, ctc=500.0)

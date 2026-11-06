@@ -1611,6 +1611,7 @@ TEXT_COLUMNS = {
     "march_2025_step_orders": {"step"},
     "poverty_2026": {"comparison", "group"},
     "provisions_2026": {"provision", "path"},
+    "provisions_by_file_2026": {"file", "provision"},
     "reweighted_budget_by_year": {"year", "weights"},
     "versus_outside_estimate": {"line"},
     "weight_factors": {"weights"},

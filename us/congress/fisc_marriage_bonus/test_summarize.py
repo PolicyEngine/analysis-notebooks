@@ -47,7 +47,7 @@ from summarize import (
     rescaled_draws,
     sampling_spread,
     spm_unit_totals,
-    versus_reeves,
+    versus_outside_estimate,
     weight_factor_summary,
 )
 
@@ -852,7 +852,7 @@ class TestMain:
             "provision_comparison",
             "gini_by_provision",
             "bonus_reach",
-            "versus_reeves",
+            "versus_outside_estimate",
             "data_comparison",
             "reweighted_comparison",
             "reweighted_decades",
@@ -1300,7 +1300,7 @@ class TestDistribution:
 class TestBonusReach:
     def test_rows_sum_to_the_bonus(self, runs):
         work, _ = runs
-        lines = versus_reeves(work).set_index("line").value
+        lines = versus_outside_estimate(work).set_index("line").value
         assert bonus_reach(work).bonus.sum() == pytest.approx(lines["modelled_bonus"])
 
     def test_only_units_the_bonus_pays_count_as_receiving(self, runs):
@@ -1414,10 +1414,10 @@ class TestDataComparison:
         assert share == pytest.approx(48_228 / 72_296)
 
 
-class TestVersusReeves:
+class TestVersusOutsideEstimate:
     def test_twenty_percent_of_the_joint_base_amount_bounds_the_bonus(self, runs):
         work, _ = runs
-        lines = versus_reeves(work).set_index("line").value
+        lines = versus_outside_estimate(work).set_index("line").value
         assert (
             lines["modelled_bonus"] <= lines["twenty_percent_of_joint_base_amount"] + 1
         )

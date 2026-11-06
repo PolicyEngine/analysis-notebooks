@@ -45,7 +45,7 @@ NO_PHASE_OUT = 99023
 AGI_CAP_AT_ZERO_ONLY = 99024
 FISC_CTC_REPEAL_ONLY = 99025
 CURRENT_LAW = 2
-REEVES_ESTIMATE = 30e9
+OUTSIDE_ESTIMATE = 30e9
 DOLLAR_TOLERANCE = 1.0
 RELATIVE_TOLERANCE = 1e-3
 GINI_TOLERANCE = 1e-5
@@ -1069,7 +1069,7 @@ def distribution(work: Path) -> dict[str, pd.DataFrame]:
     }
 
 
-def versus_reeves(work: Path) -> pd.DataFrame:
+def versus_outside_estimate(work: Path) -> pd.DataFrame:
     fisc = load(work, "fisc", PRIMARY_YEAR)
     no_bonus = load(work, "fisc_no_bonus", PRIMARY_YEAR)
     weight = no_bonus["tax_unit.tax_unit_weight"]
@@ -1082,8 +1082,8 @@ def versus_reeves(work: Path) -> pd.DataFrame:
     joint_base = float((no_bonus[BASE] * weight)[joint].sum())
     all_base = float((no_bonus[BASE] * weight).sum())
     rows = {
-        "reeves_estimate": REEVES_ESTIMATE,
-        "base_that_estimate_implies_at_20_percent": REEVES_ESTIMATE
+        "outside_estimate": OUTSIDE_ESTIMATE,
+        "base_that_estimate_implies_at_20_percent": OUTSIDE_ESTIMATE
         / STATUTORY_BONUS_RATE,
         "base_amount_all_filers": all_base,
         "base_amount_joint_filers": joint_base,
@@ -1094,7 +1094,7 @@ def versus_reeves(work: Path) -> pd.DataFrame:
         "joint_share_of_credit_without_bonus": joint_credit / all_credit,
         "twenty_percent_of_joint_credit": STATUTORY_BONUS_RATE * joint_credit,
         "modelled_bonus": bonus,
-        "modelled_bonus_less_reeves_estimate": bonus - REEVES_ESTIMATE,
+        "modelled_bonus_less_outside_estimate": bonus - OUTSIDE_ESTIMATE,
     }
     return pd.Series(rows, name="value").rename_axis("line").reset_index()
 
@@ -1612,7 +1612,7 @@ TEXT_COLUMNS = {
     "poverty_2026": {"comparison", "group"},
     "provisions_2026": {"provision", "path"},
     "reweighted_budget_by_year": {"year", "weights"},
-    "versus_reeves_estimate": {"line"},
+    "versus_outside_estimate": {"line"},
     "weight_factors": {"weights"},
 }
 
@@ -1698,7 +1698,7 @@ def main(
         **{f"{name}_2026": table for name, table in distribution(work).items()},
         "gini_by_provision_2026": gini_by_provision(work),
         "bonus_reach_2026": bonus_reach(work),
-        "versus_reeves_estimate": versus_reeves(work),
+        "versus_outside_estimate": versus_outside_estimate(work),
         "march_2025_ladder": ladder,
         "march_2025_step_orders": orders,
         "data_comparison_2026": comparison,

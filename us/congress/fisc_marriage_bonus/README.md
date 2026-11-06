@@ -1,10 +1,10 @@
 # FISC Act marriage bonus
 
-Richard Reeves asked PolicyEngine to rerun FISC reform 76612 with the 20 percent marriage bonus at zero, so that the difference gives the bonus's marginal cost, and to show who receives it. This folder holds that analysis. Every number is static and comes from a microsimulation run for that scenario.
+This folder reruns FISC reform 76612 with the 20 percent marriage bonus at zero, so that the difference gives the bonus's marginal cost, and shows who receives it. We estimate every number statically, from a microsimulation run for that scenario.
 
 ## Result
 
-On the current dataset, which the app runs, the bonus costs $34.3 billion in 2026 and $334.5 billion over 2026-2035, the sum of ten calendar years in nominal dollars with no discounting. That dataset holds more married parents than outside sources count. Reweighted to match those sources, the bonus costs $26.2 billion and $28.1 billion in 2026 on the two runs that match the IRS child credit lines, and $30.4 billion and $30.9 billion on the two that match only Census counts, close to Reeves's $30 billion. Over 2026-2035 the four runs give $256.0 billion to $298.5 billion. [Benchmarks](#benchmarks-outside-the-cps) and [Four sets of weights](#four-sets-of-weights) set out those runs.
+On the current dataset, which the app runs, the bonus costs $34.3 billion in 2026 and $334.5 billion over 2026-2035, the sum of ten calendar years in nominal dollars with no discounting. That dataset holds more married parents than outside sources count. Reweighted to match those sources, the bonus costs $26.2 billion and $28.1 billion in 2026 on the two runs that match the IRS child credit lines, and $30.4 billion and $30.9 billion on the two that match only Census counts. Over 2026-2035 the four runs give $256.0 billion to $298.5 billion. [Benchmarks](#benchmarks-outside-the-cps) and [Four sets of weights](#four-sets-of-weights) set out those runs.
 
 The next table comes from the current dataset through the production API.
 
@@ -68,7 +68,7 @@ The negative-income group adds $0.06 billion of statutory bonus, all of it lost 
 
 ### Is the bonus regressive?
 
-No. Reeves suspected the bonus was "the most regressive piece of the design", and that suspicion does not hold on any of the three data files or four sets of weights. A narrower version holds on all seven: the bonus reaches the bottom of the distribution less than the rest of the credit does. How far it reaches depends on the data. The rows below use the current dataset, and [Three data files](#three-data-files) and [Four sets of weights](#four-sets-of-weights) show the others. The provision comparisons below run on the current dataset alone.
+We estimate that the bonus lowers the Gini on all three data files and all four sets of weights, and on each of them the bottom five deciles receive less of it than of the rest of the credit. How far it reaches depends on the data. The rows below use the current dataset, and [Three data files](#three-data-files) and [Four sets of weights](#four-sets-of-weights) show the others. The provision comparisons below run on the current dataset alone.
 
 - The bonus narrows inequality. It lowers the Gini of household net income from 0.47012 to 0.46941 and the Gini of equivalised income across people from 0.44545 to 0.44393.
 - It cuts poverty from 11.68 percent to 11.31 percent and child poverty from 12.36 percent to 11.45 percent.
@@ -93,9 +93,9 @@ The repeal and the credit add in sequence from current law. The other rows remov
 
 The child tax credit that FISC repeals scores +0.084 on household income and -0.118 on equivalised income, so the bonus reaches the bottom harder than the child tax credit does on both rankings.
 
-### Against the $30 billion estimate
+### Against an outside estimate
 
-Reeves's back-of-envelope figure, "arithmetic on the married share", came to about $30 billion a year. The four reweighted runs bracket it at $26.2 billion to $30.9 billion, and the model's $34.3 billion on the current dataset exceeds it by $4.3 billion, or 14 percent. At 20 percent, $30 billion implies a $150 billion married base. In the model joint filers hold $204.5 billion of base amount, 72 percent of $284.3 billion, before the limits apply, and $170.3 billion of credit once they apply, 70 percent of $244.3 billion. Twenty percent of the first gives the $40.9 billion statutory bonus, and the limits take that to $34.3 billion. On the March 2025 data, joint filers hold $153.1 billion of base amount, which sits close to the implied $150 billion and gives a $30.6 billion statutory bonus. The CPS resample gives a $29.6 billion bonus after the limits. `results/versus_reeves_estimate.csv` and `results/data_comparison_2026.csv` hold these lines. We do not know the inputs behind the $30 billion, so this analysis makes no claim about where the figures part.
+An outside back-of-envelope estimate came to about $30 billion a year. The four reweighted runs bracket it at $26.2 billion to $30.9 billion, and the model's $34.3 billion on the current dataset exceeds it by $4.3 billion, or 14 percent. At 20 percent, $30 billion implies a $150 billion married base. In the model joint filers hold $204.5 billion of base amount, 72 percent of $284.3 billion, before the limits apply, and $170.3 billion of credit once they apply, 70 percent of $244.3 billion. Twenty percent of the first gives the $40.9 billion statutory bonus, and the limits take that to $34.3 billion. On the March 2025 data, joint filers hold $153.1 billion of base amount, which sits close to the implied $150 billion and gives a $30.6 billion statutory bonus. The CPS resample gives a $29.6 billion bonus after the limits. `results/versus_outside_estimate.csv` and `results/data_comparison_2026.csv` hold these lines. We do not know the inputs behind the $30 billion, so this analysis makes no claim about where the figures part.
 
 ### Against the March 2025 estimate
 

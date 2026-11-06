@@ -399,7 +399,7 @@ A Mac ran the current dataset's runs, the March 2025 and CPS runs, the 2024 benc
 ## Reproduce
 
 ```bash
-uv run --python 3.13 --with 'policyengine[models]==6.11.1' --with pytest --with hypothesis pytest us/congress/fisc_marriage_bonus -n 0
+uv run --python 3.13.9 --with-requirements us/congress/fisc_marriage_bonus/requirements_github_runs.txt pytest us/congress/fisc_marriage_bonus -n 4
 ```
 
 ```bash

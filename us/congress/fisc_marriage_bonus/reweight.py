@@ -353,13 +353,16 @@ def entropy_balance(
     which the step recomputes as the weights move. Summing n records rounds by at
     most n machine epsilons of that absolute total, plus n of the smallest
     subnormal where products underflow. The solve stops only when every miss plus
-    that bound falls within tolerance, so rounding cannot hide a miss. A zero
-    target raises when its moment's absolute total underflows to zero on records
-    that carry weight, since nothing then measures the miss. A nonzero target
-    raises as too near zero when, where the solve ends, the bound alone fills its
-    tolerance and covers its miss. The bound covers the worst case, so it also
+    that bound falls within tolerance, so rounding cannot hide a miss on nonnegative
+    weights, and a negative weight raises. A zero target raises when its moment's
+    absolute total underflows to zero on records that carry weight, since nothing
+    then measures the miss. A nonzero target raises as too near zero when, where the
+    solve ends, the bound alone fills its tolerance and every target's miss falls
+    within the bound or the tolerance. The bound covers the worst case, so it also
     refuses some targets the arithmetic happens to hit exactly.
     """
+    if not np.all(weights >= 0):
+        raise ValueError("a weight is negative or not a number")
     size = np.abs(targets)
     zero = size == 0
     records = moments.shape[1]
@@ -389,7 +392,9 @@ def entropy_balance(
     def check_resolvable(point: np.ndarray) -> None:
         current, scale, rounding = measure(point)
         miss = np.abs(moments @ current - targets) / scale
-        if np.any(~zero & (rounding >= TARGET_TOLERANCE) & (miss <= rounding)):
+        # Rounding explains the failure only if it explains every target's miss.
+        explained = np.all(miss <= np.maximum(rounding, TARGET_TOLERANCE))
+        if explained and np.any(~zero & (rounding >= TARGET_TOLERANCE)):
             raise ValueError("a target this near zero must be zero")
 
     for _ in range(MAX_NEWTON_STEPS):

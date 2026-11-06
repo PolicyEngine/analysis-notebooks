@@ -18,19 +18,39 @@ results/provisions_by_file_2026.csv.
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
+from analysis import SCENARIOS, closed_form_credit, uncapped_credit
 from summarize import (
+    BASE,
+    CREDIT,
+    DOLLAR_TOLERANCE,
+    INCOME_TAX,
+    NET_INCOME,
     PRIMARY_YEAR,
     RESULTS,
     check_same_records,
     check_tables_are_finite,
     distribution,
     gini_by_provision,
+    has_caregiver,
+    income_tolerance,
     labelled_folders,
     load,
+)
+
+FILES = (
+    "todays_data",
+    "household_counts",
+    "family_income",
+    "child_credit",
+    "all_targets",
+    "cps_2024_data",
+    "march_2025_data",
 )
 
 PROVISION_SCENARIOS = (
@@ -55,10 +75,17 @@ GINIS = ("household_gini", "equivalised_gini")
 # Household net income across a whole file sums in double precision.
 ACCOUNT_TOLERANCE = 1e-6
 GINI_ACCOUNT_TOLERANCE = 1e-12
+# Both readings of these runs compute most lines from the same arrays.
+SAVED_LINE_TOLERANCE = 1e-12
 # summarize.distribution_lines divides income by the square root of household size,
 # and summarize.distribution reads the single-precision array the model saved. So
 # the two can order a few households differently on the equivalised ranking.
-SAVED_TABLE_TOLERANCE = 1e-6
+SINGLE_PRECISION_LINES = {
+    "bonus_concentration_equivalised",
+    "rest_of_credit_concentration_equivalised",
+    "equivalised_income_gini",
+}
+SINGLE_PRECISION_LINE_TOLERANCE = 1e-6
 SAVED_LINES = {
     ("marriage_bonus", "household_gini_without"): "gini_without_the_bonus",
     ("marriage_bonus", "household_gini_with"): "gini_with_the_bonus",
@@ -91,9 +118,81 @@ SAVED_LINES = {
         "credit_without_bonus",
         "concentration_equivalised",
     ): "rest_of_credit_concentration_equivalised",
+    (
+        "marriage_bonus",
+        "top_three_deciles_equivalised",
+    ): "bonus_share_of_top_three_deciles_equivalised",
+    (
+        "credit_without_bonus",
+        "top_three_deciles",
+    ): "rest_of_credit_share_of_top_three_deciles",
+    (
+        "credit_without_bonus",
+        "top_three_deciles_equivalised",
+    ): "rest_of_credit_share_of_top_three_deciles_equivalised",
     ("marriage_bonus", "income_gini"): "household_income_gini",
     ("marriage_bonus", "income_gini_equivalised"): "equivalised_income_gini",
 }
+
+
+def check_runs(folder: Path, label: str) -> None:
+    """Each scenario's arrays must hold that scenario, by its sidecar and by the law.
+
+    The chain telescopes, so it holds on any arrays, and outside today's data the saved
+    tables reach only three of the seven scenarios. This check reads all seven on every
+    file.
+    """
+    runs = {name: load(folder, name, PRIMARY_YEAR) for name in PROVISION_SCENARIOS}
+    for name in PROVISION_SCENARIOS:
+        sidecar = json.loads((Path(folder) / f"{name}_{PRIMARY_YEAR}.json").read_text())
+        policy = json.loads(json.dumps(SCENARIOS[name], default=str))
+        if (sidecar["scenario"], sidecar["year"], sidecar["policy"]) != (
+            name,
+            PRIMARY_YEAR,
+            policy,
+        ):
+            raise AssertionError(f"{label}: {name} holds another scenario's run")
+    fisc = runs["fisc"]
+    joint = fisc["tax_unit.joint"].astype(bool)
+    agi = fisc["tax_unit.adjusted_gross_income"]
+    caregiver = has_caregiver(fisc)
+    expected = {
+        "fisc": closed_form_credit(fisc[BASE], joint, agi, 0.2),
+        "fisc_no_bonus": closed_form_credit(
+            runs["fisc_no_bonus"][BASE], joint, agi, 0.0
+        ),
+        "fisc_no_newborn_add_on": closed_form_credit(
+            runs["fisc_no_newborn_add_on"][BASE], joint, agi, 0.2
+        ),
+        "fisc_no_phase_out": np.minimum(
+            runs["fisc_no_phase_out"][BASE] * (1 + 0.2 * joint), np.maximum(agi, 0)
+        ),
+        "fisc_no_agi_cap": uncapped_credit(runs["fisc_no_agi_cap"][BASE], joint, agi),
+        "fisc_ctc_repeal_only": np.zeros(agi.shape),
+    }
+    for name, credit in expected.items():
+        if np.abs(runs[name][CREDIT] - credit * caregiver).max() > DOLLAR_TOLERANCE:
+            raise AssertionError(f"{label}: {name}'s credit misses the law")
+    # Current law's arrays reach the saved tables, and one March household of current
+    # law, at $65 million and weight 0.009, sits $10 from this identity against a $9
+    # tolerance, so this reads only the reforms.
+    for name, run in runs.items():
+        if name in ("baseline", "fisc"):
+            continue
+        if name != "fisc_ctc_repeal_only":
+            tax = (run[INCOME_TAX] - fisc[INCOME_TAX]) - (fisc[CREDIT] - run[CREDIT])
+            if np.abs(tax).max() > DOLLAR_TOLERANCE:
+                raise AssertionError(f"{label}: {name}'s income tax misses its credit")
+        moved = (run[NET_INCOME] - fisc[NET_INCOME]) - (
+            run["household.household_benefits"]
+            - fisc["household.household_benefits"]
+            - run["household.household_tax"]
+            + fisc["household.household_tax"]
+        )
+        if (np.abs(moved) > income_tolerance(run)).any():
+            raise AssertionError(
+                f"{label}: {name}'s net income misses tax and benefits"
+            )
 
 
 def provisions_by_file(folders: dict[str, Path]) -> pd.DataFrame:
@@ -156,7 +255,12 @@ def check_against_saved_tables(
             gap = abs(
                 rows.loc[(label, provision), column] - comparison.loc[line, label]
             )
-            if not gap <= SAVED_TABLE_TOLERANCE:
+            tolerance = (
+                SINGLE_PRECISION_LINE_TOLERANCE
+                if line in SINGLE_PRECISION_LINES
+                else SAVED_LINE_TOLERANCE
+            )
+            if not gap <= tolerance:
                 raise AssertionError(f"{label}: {provision} {column} misses {line}")
             largest = max(largest, float(gap))
         gaps[label] = largest
@@ -164,7 +268,7 @@ def check_against_saved_tables(
     for provision, row in saved.iterrows():
         for column, value in row.items():
             found = rows.loc[("todays_data", provision), column]
-            if not abs(found - value) <= SAVED_TABLE_TOLERANCE * max(abs(value), 1.0):
+            if not abs(found - value) <= SAVED_LINE_TOLERANCE * max(abs(value), 1.0):
                 raise AssertionError(f"todays_data: {provision} misses {column}")
     return gaps
 
@@ -201,6 +305,10 @@ def check_tables_hold_the_answer(table: pd.DataFrame) -> None:
 
 
 def main(folders: dict[str, Path], results: Path = RESULTS) -> pd.DataFrame:
+    if set(folders) != set(FILES):
+        raise ValueError(f"expected one folder for each of {FILES}")
+    for label, folder in folders.items():
+        check_runs(folder, label)
     table = provisions_by_file(folders)
     check_accounts(table)
     check_against_saved_tables(table, results)

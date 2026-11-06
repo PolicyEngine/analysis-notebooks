@@ -2,8 +2,10 @@
 # files and sets of weights, on GitHub's hosted runners:
 # https://github.com/PolicyEngine/analysis-notebooks/actions/runs/42218930233
 # It ran from a scratch branch at commit 2e2c08e, with this folder's factors/ and
-# requirements_github_runs.txt. To run it again, copy it to .github/workflows on a branch
-# named in the push trigger and upload the artifacts into provisions.py's folders.
+# requirements_github_runs.txt. To run it again, copy it to .github/workflows on a new
+# branch cut from this folder's commit, name that branch in the push trigger, download
+# the artifacts with `gh run download`, and move each {set}-{scenario} folder's files
+# into a folder named for its set. These artifacts expire on 2027-02-04.
 name: FISC provisions on every file
 on:
   push:

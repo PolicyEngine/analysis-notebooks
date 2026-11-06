@@ -927,6 +927,10 @@ def gini_by_provision(work: Path) -> pd.DataFrame:
                 * baseline["household.household_weight"]
             ).sum()
         )
+        if dollars == 0:
+            raise AssertionError(
+                f"{provision} moves no dollars between {with_it} and {without_it}"
+            )
         household_change = household_gini(reform) - household_gini(baseline)
         equivalised_change = equivalised_gini(reform) - equivalised_gini(baseline)
         rows.append(

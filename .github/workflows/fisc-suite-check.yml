@@ -1,0 +1,25 @@
+name: FISC folder tests from a clean install
+on:
+  push:
+    branches: [fisc-suite-check]
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: us/congress/fisc_marriage_bonus
+    env:
+      OMP_NUM_THREADS: "2"
+      PYTHONPATH: "."
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install the pinned bundle
+        run: |
+          uv venv --python 3.13.9 .venv
+          uv pip install --python .venv/bin/python -r requirements_github_runs.txt
+      - name: Run every test in the folder
+        run: .venv/bin/python -m pytest -n 4 -q -p no:cacheprovider

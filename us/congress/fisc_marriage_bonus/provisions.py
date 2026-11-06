@@ -58,7 +58,7 @@ GINI_ACCOUNT_TOLERANCE = 1e-12
 # summarize.distribution_lines divides income by the square root of household size,
 # and summarize.distribution reads the single-precision array the model saved. So
 # the two can order a few households differently on the equivalised ranking.
-SAVED_TABLE_TOLERANCE = 1e-5
+SAVED_TABLE_TOLERANCE = 1e-6
 SAVED_LINES = {
     ("marriage_bonus", "household_gini_without"): "gini_without_the_bonus",
     ("marriage_bonus", "household_gini_with"): "gini_with_the_bonus",
@@ -181,6 +181,16 @@ def check_tables_hold_the_answer(table: pd.DataFrame) -> None:
                 raise AssertionError(f"{label}: the repeal does not raise {gini}")
             if change["agi_cap"] <= 0:
                 raise AssertionError(f"{label}: the AGI cap does not raise {gini}")
+            per_billion = rows[f"{gini}_change_per_billion"]
+            if per_billion["agi_cap"] <= per_billion["ctc_repeal"]:
+                raise AssertionError(f"{label}: the repeal raises {gini} more per $1B")
+        moves = rows[[f"{gini}_change" for gini in GINIS]]
+        if not ((moves > 0).all(axis=1) | (moves < 0).all(axis=1)).all():
+            raise AssertionError(f"{label}: a provision moves the two Ginis apart")
+        per_billion = rows["household_gini_change_per_billion"]
+        for payment in set(PAYMENTS) - {"marriage_bonus"}:
+            if per_billion["marriage_bonus"] <= per_billion[payment]:
+                raise AssertionError(f"{label}: the bonus beats {payment} per $1B")
         for suffix in RANKINGS.values():
             shares = rows[f"bottom_five_deciles{suffix}"]
             for payment in set(PAYMENTS) - {"marriage_bonus"}:

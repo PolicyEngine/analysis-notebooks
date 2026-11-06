@@ -232,14 +232,14 @@ class TestAgainstSavedTables:
 def answer_table():
     """One file on which the bonus reaches the bottom least and lowers both Ginis."""
     rows = []
-    for provision, gini_change, share in (
-        ("ctc_repeal", 0.003, 0.5),
-        ("credit_without_bonus", -0.007, 0.6),
-        ("marriage_bonus", -0.0005, 0.4),
-        ("newborn_add_on", -0.0002, 0.62),
-        ("phase_out", -0.0008, 0.001),
-        ("agi_cap", 0.0005, 0.9),
-        ("full_fisc", -0.005, 0.7),
+    for provision, gini_change, per_billion, share in (
+        ("ctc_repeal", 0.003, 2e-5, 0.5),
+        ("credit_without_bonus", -0.007, -3e-5, 0.6),
+        ("marriage_bonus", -0.0005, -2e-5, 0.4),
+        ("newborn_add_on", -0.0002, -2.5e-5, 0.62),
+        ("phase_out", -0.0008, -2e-5, 0.001),
+        ("agi_cap", 0.0005, 6e-5, 0.9),
+        ("full_fisc", -0.005, -3.6e-5, 0.7),
     ):
         rows.append(
             {
@@ -247,6 +247,8 @@ def answer_table():
                 "provision": provision,
                 "household_gini_change": gini_change,
                 "equivalised_gini_change": gini_change,
+                "household_gini_change_per_billion": per_billion,
+                "equivalised_gini_change_per_billion": per_billion,
                 "bottom_five_deciles": share,
                 "bottom_five_deciles_equivalised": share,
             }
@@ -267,6 +269,11 @@ class TestTheAnswer:
             ("agi_cap", "equivalised_gini_change", 0.0, "cap does not raise"),
             ("marriage_bonus", "bottom_five_deciles", 0.61, "credit_without_bonus"),
             ("newborn_add_on", "bottom_five_deciles_equivalised", 0.3, "newborn"),
+            ("phase_out", "equivalised_gini_change", 0.0005, "two Ginis apart"),
+            ("agi_cap", "household_gini_change_per_billion", 1e-5, "repeal raises"),
+            ("agi_cap", "equivalised_gini_change_per_billion", 2e-5, "repeal raises"),
+            ("marriage_bonus", "household_gini_change_per_billion", -4e-5, "beats"),
+            ("newborn_add_on", "household_gini_change_per_billion", -1e-5, "beats"),
         ],
     )
     def test_a_file_that_breaks_it_fails(self, provision, column, value, message):
@@ -274,6 +281,15 @@ class TestTheAnswer:
         table.loc[table.provision == provision, column] = value
         with pytest.raises(AssertionError, match=message):
             check_tables_hold_the_answer(table)
+
+    def test_the_bonus_may_beat_the_add_on_per_dollar_when_equivalised(self):
+        """Intended: the per-dollar claim covers household net income alone. On five of
+        the seven files the bonus lowers the equivalised Gini more per dollar than the
+        add-on does, and the check must not claim otherwise."""
+        table = answer_table()
+        bonus = table.provision == "marriage_bonus"
+        table.loc[bonus, "equivalised_gini_change_per_billion"] = -4e-5
+        check_tables_hold_the_answer(table)
 
 
 class TestMain:

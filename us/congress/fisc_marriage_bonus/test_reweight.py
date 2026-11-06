@@ -674,7 +674,6 @@ def test_underflow_cannot_hide_a_miss_on_a_zero_target():
     weights = np.array([smallest, smallest])
     moment = np.array([0.5, -0.25])
     assert np.abs(moment) @ weights == 0
-    assert Fraction(0.25) / Fraction(0.75) == Fraction(1, 3)
     with pytest.raises(ValueError, match="underflows"):
         entropy_balance(weights, moment[None, :], np.array([0.0]))
 
@@ -720,8 +719,10 @@ def test_a_zero_target_above_underflow_still_lands():
     )
 )
 def test_a_returned_zero_target_holds_in_exact_arithmetic(records):
-    """At any scale of weight, a solve that returns meets its target exactly enough:
-    in rationals, on the returned factors and on the weights a caller computes."""
+    """At any scale of weight, a solve that returns meets its target in rationals on
+    the weights a caller computes, as apply_weight_factors computes them. Rounding the
+    product of a subnormal weight and a factor can add more than the tolerance, so the
+    exact product of the returned factors and the weights carries no such promise."""
     weights, moment = (np.array(column) for column in zip(*records))
     with np.errstate(all="ignore"):
         try:
@@ -730,13 +731,69 @@ def test_a_returned_zero_target_holds_in_exact_arithmetic(records):
             return
     tolerance = Fraction(TARGET_TOLERANCE)
     rational = [Fraction(float(m)) for m in moment]
-    on_factors = [
-        Fraction(float(w)) * Fraction(float(f)) for w, f in zip(weights, factors)
-    ]
-    on_weights = [Fraction(float(w)) for w in weights * factors]
-    for reached in (on_factors, on_weights):
-        miss = abs(sum(m * w for m, w in zip(rational, reached)))
-        assert miss <= tolerance * sum(abs(m) * w for m, w in zip(rational, reached))
+    reached = [Fraction(float(w)) for w in weights * factors]
+    miss = abs(sum(m * w for m, w in zip(rational, reached)))
+    assert miss <= tolerance * sum(abs(m) * w for m, w in zip(rational, reached))
+
+
+@pytest.mark.parametrize(
+    ("weights", "moment"),
+    [
+        ([np.nextafter(0.0, 1.0)] * 2, [0.75, -0.6]),
+        ([2 * np.nextafter(0.0, 1.0)] * 2, [0.6, -0.4]),
+    ],
+)
+def test_partial_underflow_cannot_hide_a_miss_on_a_zero_target(weights, moment):
+    """One product rounds up and the other down, so the computed sum and total both
+    read nonzero while the exact miss far exceeds the tolerance."""
+    with pytest.raises(ValueError):
+        entropy_balance(np.array(weights), np.array([moment]), np.array([0.0]))
+
+
+def test_underflow_that_appears_after_the_solve_moves_raises():
+    """The first target shrinks the small records until the second moment underflows.
+    Its total reads nonzero at the starting weights."""
+    weights = np.array([1.0, 1e-305, 1e-305])
+    moments = np.array([[1e-7, 1.0, 1.0], [0.0, 1e-18, -1e-18 * (1 + 1e-4)]])
+    targets = np.array([1e-7 * (1 - 20e-7), 0.0])
+    with pytest.raises(ValueError, match="underflows"), np.errstate(all="ignore"):
+        entropy_balance(weights, moments, targets)
+
+
+def test_weights_that_underflow_to_zero_mid_solve_raise():
+    """Those records still carry weight as the caller gave it, so a zero total at the
+    solve's current weights hides the miss on them."""
+    weights = np.r_[1.0, np.full(300, 2e-311)]
+    signs = np.r_[np.ones(151), -np.ones(149)]
+    moments = np.vstack([np.r_[1e-7, np.ones(300)], np.r_[0.0, signs]])
+    targets = np.array([1e-7 * (1 - 31e-7), 0.0])
+    with pytest.raises(ValueError, match="underflows"), np.errstate(all="ignore"):
+        entropy_balance(weights, moments, targets)
+
+
+@pytest.mark.parametrize(
+    ("weights", "moments", "targets"),
+    [
+        # Hitting this target needs a factor below the clip.
+        ([1e20], [[1.0]], [1.0]),
+        # Both records move together, so no factor can double the second target. The
+        # bound fills the first target's tolerance once the factors reach the clip.
+        ([1e15, 1e15], [[1.0, 1.0], [2.0, 2.0]], [1e-5, 1e-5]),
+    ],
+)
+def test_a_target_out_of_reach_does_not_read_as_near_zero(weights, moments, targets):
+    """A typo in a published target must not send someone hunting a target near zero:
+    these misses dwarf the rounding bound, so the bound does not explain them."""
+    with pytest.raises(ValueError, match="did not reach|stalled|Singular"):
+        entropy_balance(np.array(weights), np.array(moments), np.array(targets))
+
+
+def test_a_solve_that_lands_on_its_last_step_returns(monkeypatch):
+    """The stop check reads the state the last step reached, so the limit on steps
+    cannot refuse a state that met its target."""
+    monkeypatch.setattr("reweight.MAX_NEWTON_STEPS", 4)
+    factors = entropy_balance(np.array([1.0]), np.array([[1.0]]), np.array([1.5]))
+    assert abs(factors[0] - 1.5) < 1.5 * TARGET_TOLERANCE
 
 
 def test_exhaustion_reads_the_rounding_where_the_solve_ended(monkeypatch):

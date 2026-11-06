@@ -356,19 +356,15 @@ def entropy_balance(
     that bound falls within tolerance, so rounding cannot hide a miss. A zero
     target raises when its moment's absolute total underflows to zero on records
     that carry weight, since nothing then measures the miss. A nonzero target
-    whose tolerance the bound alone fills, where the solve ends, raises as too
-    near zero. The bound covers the worst case, so it also refuses some targets
-    the arithmetic happens to hit exactly.
+    raises as too near zero when, where the solve ends, the bound alone fills its
+    tolerance and covers its miss. The bound covers the worst case, so it also
+    refuses some targets the arithmetic happens to hit exactly.
     """
     size = np.abs(targets)
     zero = size == 0
     records = moments.shape[1]
     machine = np.finfo(float)
     carries_weight = np.any((moments != 0) & (weights != 0), axis=1)
-
-    def check_resolvable(rounding: np.ndarray) -> None:
-        if np.any(~zero & (rounding >= TARGET_TOLERANCE)):
-            raise ValueError("a target this near zero must be zero")
 
     # Multipliers on the moments as given; each step rescales them to solve.
     multipliers = np.zeros(moments.shape[0])
@@ -389,6 +385,12 @@ def entropy_balance(
         scale[scale == 0] = 1.0
         rounding = records * (machine.eps * total + machine.smallest_subnormal) / scale
         return current, scale, rounding
+
+    def check_resolvable(point: np.ndarray) -> None:
+        current, scale, rounding = measure(point)
+        miss = np.abs(moments @ current - targets) / scale
+        if np.any(~zero & (rounding >= TARGET_TOLERANCE) & (miss <= rounding)):
+            raise ValueError("a target this near zero must be zero")
 
     for _ in range(MAX_NEWTON_STEPS):
         current, scale, rounding = measure(multipliers)
@@ -416,10 +418,14 @@ def entropy_balance(
         ):
             step /= 2
             if step < 1e-10:
-                check_resolvable(rounding)
+                check_resolvable(multipliers)
                 raise ValueError("the line search stalled")
         multipliers = multipliers + step * direction
-    check_resolvable(measure(multipliers)[2])
+    current, scale, rounding = measure(multipliers)
+    miss = np.abs(moments @ current - targets) / scale
+    if np.max(miss + rounding) < TARGET_TOLERANCE:
+        return factors_at(multipliers)
+    check_resolvable(multipliers)
     raise ValueError("entropy balancing did not reach the targets")
 
 

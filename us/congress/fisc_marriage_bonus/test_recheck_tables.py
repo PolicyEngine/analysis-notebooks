@@ -8,7 +8,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-from hypothesis import given
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import recheck_tables
@@ -27,6 +27,7 @@ class TestCompareTable:
     def test_a_copy_counts_its_filled_numbers(self):
         assert compare_table("t", table(), table()) == (5, 0.0)
 
+    @settings(deadline=None)
     @given(st.lists(st.one_of(SIZES, st.just(np.nan)), min_size=1, max_size=20))
     def test_any_copy_passes_with_no_gap(self, values):
         frame = pd.DataFrame({"x": values})
@@ -34,6 +35,7 @@ class TestCompareTable:
         assert numbers == sum(not np.isnan(value) for value in values)
         assert largest == 0.0
 
+    @settings(deadline=None)
     @given(SIZES)
     def test_a_move_within_the_tolerance_reports_its_gap(self, value):
         moved = value * (1 + RECHECK_TOLERANCE / 2)
@@ -42,6 +44,7 @@ class TestCompareTable:
         )
         assert largest == pytest.approx(RECHECK_TOLERANCE / 2, rel=0.5)
 
+    @settings(deadline=None)
     @given(SIZES, st.sampled_from([1, -1]))
     def test_a_move_past_the_tolerance_raises(self, value, sign):
         moved = value * (1 + sign * 2 * RECHECK_TOLERANCE)
@@ -49,6 +52,18 @@ class TestCompareTable:
             compare_table(
                 "t", pd.DataFrame({"x": [value]}), pd.DataFrame({"x": [moved]})
             )
+
+    @settings(deadline=None)
+    @given(SIZES, st.sampled_from([1, -1]))
+    def test_a_hundred_trillionth_raises_and_one_unit_in_the_last_place_passes(
+        self, value, sign
+    ):
+        """Stated apart from RECHECK_TOLERANCE, so loosening it fails here."""
+        saved = pd.DataFrame({"x": [value]})
+        with pytest.raises(AssertionError, match="t: x moves"):
+            compare_table("t", saved, pd.DataFrame({"x": [value * (1 + sign * 1e-14)]}))
+        step = np.nextafter(value, sign * np.inf)
+        assert compare_table("t", saved, pd.DataFrame({"x": [step]}))[1] < 1e-15
 
     def test_a_number_against_zero_raises(self):
         with pytest.raises(AssertionError, match="moves"):

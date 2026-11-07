@@ -327,6 +327,63 @@ class TestAgainstSavedTables:
         with pytest.raises(AssertionError, match="gini_with_the_bonus"):
             check_against_saved_tables(table, tmp_path)
 
+    # Written out apart from provisions.SINGLE_PRECISION_LINES, so a change there
+    # fails here: only these lines read the model's single-precision copy of
+    # equivalised income.
+    EQUIVALISED_READS = {
+        "bonus_concentration_equivalised",
+        "rest_of_credit_concentration_equivalised",
+        "equivalised_income_gini",
+    }
+
+    @pytest.mark.parametrize(
+        "key,line", list(SAVED_LINES.items()), ids=list(SAVED_LINES.values())
+    )
+    def test_a_billionth_trips_each_line_that_reads_the_same_arrays(
+        self, table, tmp_path, key, line
+    ):
+        saved_tables(tmp_path, table)
+        provision, column = key
+        table.loc[table.provision == provision, column] += 1e-9
+        if line in self.EQUIVALISED_READS:
+            check_against_saved_tables(table, tmp_path)
+        else:
+            with pytest.raises(AssertionError, match=f"misses {line}$"):
+                check_against_saved_tables(table, tmp_path)
+
+    @pytest.mark.parametrize(
+        "column",
+        [
+            "net_income_change",
+            "household_gini_with",
+            "household_gini_change_per_billion",
+            "equivalised_gini_without",
+        ],
+    )
+    def test_a_billionth_off_the_saved_gini_table_fails(self, table, tmp_path, column):
+        """A billionth of the value, or of one where the value sits below one."""
+        saved_tables(tmp_path, table)
+        path = tmp_path / "gini_by_provision_2026.csv"
+        frame = pd.read_csv(path)
+        rows = frame.provision == "phase_out"
+        value = frame.loc[rows, column].iloc[0]
+        frame.loc[rows, column] = value + 1e-9 * max(abs(value), 1.0)
+        frame.to_csv(path, index=False)
+        with pytest.raises(AssertionError, match=f"phase_out misses {column}"):
+            check_against_saved_tables(table, tmp_path)
+
+    @pytest.mark.parametrize(
+        "name", ["data_comparison_2026.csv", "reweighted_comparison_2026.csv"]
+    )
+    def test_every_distribution_line_the_commit_holds_gets_checked(self, name):
+        lines = pd.read_csv(provisions.RESULTS / name).line
+        distribution = {
+            line
+            for line in lines
+            if any(word in line for word in ("gini", "deciles", "concentration"))
+        }
+        assert distribution == set(SAVED_LINES.values())
+
 
 def answer_table():
     """One file on which the bonus reaches the bottom least and lowers both Ginis."""
@@ -500,14 +557,54 @@ class TestRuns:
         with pytest.raises(AssertionError, match="income tax misses"):
             provisions.check_runs(folder, "a")
 
-    def test_another_scenarios_sidecar_fails(self, lawful, in_memory):
+    @pytest.mark.parametrize(
+        "change",
+        [
+            {"scenario": "fisc"},
+            {"year": summarize.PRIMARY_YEAR + 1},
+            # fisc_no_agi_cap shares full FISC's parameters, so take another reform's.
+            {"policy": json.loads(json.dumps(SCENARIOS["fisc_no_bonus"], default=str))},
+        ],
+        ids=["scenario", "year", "policy"],
+    )
+    def test_another_scenarios_sidecar_fails(self, lawful, in_memory, change):
         runs, folder = lawful
         in_memory({folder: runs})
         path = folder / f"fisc_no_agi_cap_{summarize.PRIMARY_YEAR}.json"
-        sidecar = json.loads(path.read_text()) | {"scenario": "fisc"}
+        sidecar = json.loads(path.read_text()) | change
         path.write_text(json.dumps(sidecar))
         with pytest.raises(AssertionError, match="another scenario"):
             provisions.check_runs(folder, "a")
+
+    def test_a_full_fisc_credit_off_the_law_fails(self, lawful, in_memory):
+        """The other checks measure each reform from full FISC, so they cannot see an
+        error there that moves its tax and income with its credit."""
+        runs, folder = lawful
+        credit = runs["fisc"][CREDIT].copy()
+        credit[5] += 2.0
+        runs["fisc"] = self.with_credit(runs["fisc"], credit)
+        in_memory({folder: runs})
+        with pytest.raises(AssertionError, match="a: fisc's credit misses the law"):
+            provisions.check_runs(folder, "a")
+
+    def test_only_tax_units_with_an_adult_receive_the_credit(self, lawful, in_memory):
+        runs, folder = lawful
+        # Tax unit 5 files alone, with a $3,000 base amount and $20,000 of AGI.
+        unit = np.arange(N) == 5
+        young = {
+            name: run
+            | {"tax_unit.age_head": np.where(unit, 17, run["tax_unit.age_head"])}
+            for name, run in runs.items()
+        }
+        in_memory({folder: young})
+        with pytest.raises(AssertionError, match="misses the law"):
+            provisions.check_runs(folder, "a")
+        unpaid = {
+            name: self.with_credit(run, np.where(unit, 0.0, run[CREDIT]))
+            for name, run in young.items()
+        }
+        in_memory({folder: unpaid})
+        provisions.check_runs(folder, "a")
 
 
 class TestMain:
@@ -521,6 +618,28 @@ class TestMain:
         in_memory({"todays_data": fake_runs()})
         with pytest.raises(ValueError, match="one folder for each"):
             provisions.main({"todays_data": "todays_data"}, tmp_path)
+        assert list(tmp_path.iterdir()) == []
+
+    def test_an_extra_file_raises(self, tmp_path):
+        with pytest.raises(ValueError, match="one folder for each"):
+            provisions.main(
+                {"todays_data": "todays_data", "eighth": "eighth"}, tmp_path
+            )
+        assert list(tmp_path.iterdir()) == []
+
+    def test_every_folder_gets_its_runs_checked(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(provisions, "FILES", ("todays_data", "other"))
+        checked = []
+
+        def check_runs(folder, label):
+            checked.append(label)
+            if label == "other":
+                raise AssertionError("other: a run misses the law")
+
+        monkeypatch.setattr(provisions, "check_runs", check_runs)
+        with pytest.raises(AssertionError, match="other: a run"):
+            provisions.main({"todays_data": "todays_data", "other": "other"}, tmp_path)
+        assert checked == ["todays_data", "other"]
         assert list(tmp_path.iterdir()) == []
 
     @pytest.mark.parametrize(

@@ -813,6 +813,14 @@ def test_a_negative_weight_raises():
         )
 
 
+def test_a_weight_that_is_not_a_number_raises():
+    """NaN fails every comparison, so a test for weights below zero lets it through."""
+    with pytest.raises(ValueError, match="not a number"):
+        entropy_balance(
+            np.array([1.0, np.nan]), np.array([[1.0, 1.0]]), np.array([2.0])
+        )
+
+
 def test_a_solve_that_lands_on_its_last_step_returns(monkeypatch):
     """The stop check reads the state the last step reached, so the limit on steps
     cannot refuse a state that met its target."""

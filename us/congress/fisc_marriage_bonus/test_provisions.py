@@ -329,10 +329,10 @@ class TestAgainstSavedTables:
 
     # Written out apart from provisions.SINGLE_PRECISION_LINES, so a change there
     # fails here. provisions.py reads the model's single-precision equivalised income
-    # for every equivalised line, and summarize.py divides net income by the square
-    # root of household size for every saved equivalised line but the equivalised
-    # Ginis without and with the bonus. On the real runs the rounding moves only these
-    # three past a trillionth.
+    # for every equivalised line, and summarize.distribution_lines divides net income
+    # by the square root of household size for every saved equivalised line but the
+    # equivalised Ginis without and with the bonus. On the real runs the rounding moves
+    # only these three past a trillionth.
     MILLIONTH_LINES = frozenset(
         {
             "bonus_concentration_equivalised",
@@ -344,7 +344,7 @@ class TestAgainstSavedTables:
     @pytest.mark.parametrize(
         "key,line", list(SAVED_LINES.items()), ids=list(SAVED_LINES.values())
     )
-    def test_a_billionth_trips_each_line_held_to_a_trillionth(
+    def test_a_billionth_trips_only_the_lines_held_to_a_trillionth(
         self, table, tmp_path, key, line
     ):
         saved_tables(tmp_path, table)
@@ -366,7 +366,7 @@ class TestAgainstSavedTables:
         ],
     )
     def test_ten_trillionths_trip_the_saved_gini_table(self, table, tmp_path, column):
-        """Ten trillionths of the value, or of one where the value sits below one."""
+        """Ten trillionths of the value, or of one where its size sits below one."""
         saved_tables(tmp_path, table)
         path = tmp_path / "gini_by_provision_2026.csv"
         frame = pd.read_csv(path)
@@ -625,9 +625,11 @@ class TestMain:
         monkeypatch.setattr(provisions, "FILES", ("todays_data",))
         monkeypatch.setattr(provisions, "check_runs", lambda folder, label: None)
 
-    def test_a_missing_file_raises(self, in_memory, tmp_path, monkeypatch):
+    def test_a_missing_file_raises(self, tmp_path, monkeypatch):
         monkeypatch.setattr(provisions, "FILES", ("todays_data", "other"))
-        in_memory({"todays_data": fake_runs()})
+        monkeypatch.setattr(
+            provisions, "provisions_by_file", lambda folders: pytest.fail("built")
+        )
         with pytest.raises(ValueError, match="one folder for each"):
             provisions.main({"todays_data": "todays_data"}, tmp_path)
         assert list(tmp_path.iterdir()) == []

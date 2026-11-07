@@ -77,9 +77,11 @@ ACCOUNT_TOLERANCE = 1e-6
 GINI_ACCOUNT_TOLERANCE = 1e-12
 # Both readings of these runs compute most lines from the same arrays.
 SAVED_LINE_TOLERANCE = 1e-12
-# summarize.distribution_lines divides income by the square root of household size,
-# and summarize.distribution reads the single-precision array the model saved. So
-# the two can order a few households differently on the equivalised ranking.
+# summarize.distribution reads the single-precision equivalised income the model
+# saved, and summarize.distribution_lines divides net income by the square root of
+# household size for every saved equivalised line but the equivalised Ginis without
+# and with the bonus. The model's rounding ties a few households on the equivalised
+# ranking and moves the current-law Gini of equivalised income.
 SINGLE_PRECISION_LINES = {
     "bonus_concentration_equivalised",
     "rest_of_credit_concentration_equivalised",

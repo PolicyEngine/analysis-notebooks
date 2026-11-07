@@ -328,24 +328,29 @@ class TestAgainstSavedTables:
             check_against_saved_tables(table, tmp_path)
 
     # Written out apart from provisions.SINGLE_PRECISION_LINES, so a change there
-    # fails here: only these lines read the model's single-precision copy of
-    # equivalised income.
-    EQUIVALISED_READS = {
-        "bonus_concentration_equivalised",
-        "rest_of_credit_concentration_equivalised",
-        "equivalised_income_gini",
-    }
+    # fails here. provisions.py reads the model's single-precision equivalised income
+    # for every equivalised line, and summarize.py divides net income by the square
+    # root of household size for every saved equivalised line but the equivalised
+    # Ginis without and with the bonus. On the real runs the rounding moves only these
+    # three past a trillionth.
+    MILLIONTH_LINES = frozenset(
+        {
+            "bonus_concentration_equivalised",
+            "rest_of_credit_concentration_equivalised",
+            "equivalised_income_gini",
+        }
+    )
 
     @pytest.mark.parametrize(
         "key,line", list(SAVED_LINES.items()), ids=list(SAVED_LINES.values())
     )
-    def test_a_billionth_trips_each_line_that_reads_the_same_arrays(
+    def test_a_billionth_trips_each_line_held_to_a_trillionth(
         self, table, tmp_path, key, line
     ):
         saved_tables(tmp_path, table)
         provision, column = key
         table.loc[table.provision == provision, column] += 1e-9
-        if line in self.EQUIVALISED_READS:
+        if line in self.MILLIONTH_LINES:
             check_against_saved_tables(table, tmp_path)
         else:
             with pytest.raises(AssertionError, match=f"misses {line}$"):
@@ -360,14 +365,14 @@ class TestAgainstSavedTables:
             "equivalised_gini_without",
         ],
     )
-    def test_a_billionth_off_the_saved_gini_table_fails(self, table, tmp_path, column):
-        """A billionth of the value, or of one where the value sits below one."""
+    def test_ten_trillionths_trip_the_saved_gini_table(self, table, tmp_path, column):
+        """Ten trillionths of the value, or of one where the value sits below one."""
         saved_tables(tmp_path, table)
         path = tmp_path / "gini_by_provision_2026.csv"
         frame = pd.read_csv(path)
         rows = frame.provision == "phase_out"
         value = frame.loc[rows, column].iloc[0]
-        frame.loc[rows, column] = value + 1e-9 * max(abs(value), 1.0)
+        frame.loc[rows, column] = value + 1e-11 * max(abs(value), 1.0)
         frame.to_csv(path, index=False)
         with pytest.raises(AssertionError, match=f"phase_out misses {column}"):
             check_against_saved_tables(table, tmp_path)
@@ -547,7 +552,13 @@ class TestRuns:
             provisions.check_runs(folder, "a")
 
     @pytest.mark.parametrize(
-        "scenario", ["fisc_no_bonus", "fisc_no_newborn_add_on", "fisc_no_agi_cap"]
+        "scenario",
+        [
+            "fisc_no_bonus",
+            "fisc_no_newborn_add_on",
+            "fisc_no_phase_out",
+            "fisc_no_agi_cap",
+        ],
     )
     def test_income_tax_that_misses_the_credit_fails(self, lawful, in_memory, scenario):
         runs, folder = lawful
@@ -576,15 +587,16 @@ class TestRuns:
         with pytest.raises(AssertionError, match="another scenario"):
             provisions.check_runs(folder, "a")
 
-    def test_a_full_fisc_credit_off_the_law_fails(self, lawful, in_memory):
+    @pytest.mark.parametrize("scenario", PROVISION_SCENARIOS[1:])
+    def test_a_credit_off_the_law_fails(self, lawful, in_memory, scenario):
         """The other checks measure each reform from full FISC, so they cannot see an
-        error there that moves its tax and income with its credit."""
+        error that moves a run's tax and income with its credit."""
         runs, folder = lawful
-        credit = runs["fisc"][CREDIT].copy()
+        credit = runs[scenario][CREDIT].copy()
         credit[5] += 2.0
-        runs["fisc"] = self.with_credit(runs["fisc"], credit)
+        runs[scenario] = self.with_credit(runs[scenario], credit)
         in_memory({folder: runs})
-        with pytest.raises(AssertionError, match="a: fisc's credit misses the law"):
+        with pytest.raises(AssertionError, match=f"a: {scenario}'s credit misses"):
             provisions.check_runs(folder, "a")
 
     def test_only_tax_units_with_an_adult_receive_the_credit(self, lawful, in_memory):
@@ -620,7 +632,10 @@ class TestMain:
             provisions.main({"todays_data": "todays_data"}, tmp_path)
         assert list(tmp_path.iterdir()) == []
 
-    def test_an_extra_file_raises(self, tmp_path):
+    def test_an_extra_file_raises(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            provisions, "provisions_by_file", lambda folders: pytest.fail("built")
+        )
         with pytest.raises(ValueError, match="one folder for each"):
             provisions.main(
                 {"todays_data": "todays_data", "eighth": "eighth"}, tmp_path
@@ -629,17 +644,20 @@ class TestMain:
 
     def test_every_folder_gets_its_runs_checked(self, tmp_path, monkeypatch):
         monkeypatch.setattr(provisions, "FILES", ("todays_data", "other"))
+        monkeypatch.setattr(
+            provisions, "provisions_by_file", lambda folders: pytest.fail("built")
+        )
         checked = []
 
         def check_runs(folder, label):
-            checked.append(label)
+            checked.append((label, folder))
             if label == "other":
                 raise AssertionError("other: a run misses the law")
 
         monkeypatch.setattr(provisions, "check_runs", check_runs)
         with pytest.raises(AssertionError, match="other: a run"):
-            provisions.main({"todays_data": "todays_data", "other": "other"}, tmp_path)
-        assert checked == ["todays_data", "other"]
+            provisions.main({"todays_data": "folder_a", "other": "folder_b"}, tmp_path)
+        assert checked == [("todays_data", "folder_a"), ("other", "folder_b")]
         assert list(tmp_path.iterdir()) == []
 
     @pytest.mark.parametrize(

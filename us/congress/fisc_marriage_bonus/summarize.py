@@ -11,6 +11,7 @@ after every check passes, so that file exists only for a run that passed.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -30,6 +31,8 @@ from analysis import (
     weighted_decile,
     weighted_gini,
 )
+from benchmarks import with_weight_factors
+from reweight import load_factors
 
 HERE = Path(__file__).parent
 RESULTS = HERE / "results"
@@ -42,7 +45,7 @@ NO_PHASE_OUT = 99023
 AGI_CAP_AT_ZERO_ONLY = 99024
 FISC_CTC_REPEAL_ONLY = 99025
 CURRENT_LAW = 2
-REEVES_ESTIMATE = 30e9
+OUTSIDE_ESTIMATE = 30e9
 DOLLAR_TOLERANCE = 1.0
 RELATIVE_TOLERANCE = 1e-3
 GINI_TOLERANCE = 1e-5
@@ -65,7 +68,11 @@ SINGLE_PRECISION_STEPS = 2
 SAMPLING_DRAWS = 200
 SAMPLING_SEED = 0
 LADDER_RUNGS_WITH_NO_STEP = 2
-DECILE_TABLES = ("deciles_by_component_2026", "deciles_by_data_file_2026")
+DECILE_TABLES = (
+    "deciles_by_component_2026",
+    "deciles_by_data_file_2026",
+    "deciles_by_weights_2026",
+)
 CAREGIVER_AGE = 18
 PRIMARY_YEAR = 2026
 LAST_YEAR = 2035
@@ -78,6 +85,19 @@ NET_INCOME = "household.household_net_income"
 CHILD_AGE = 18
 SENIOR_AGE = 65
 SCENARIOS_WITH_DETAIL = ("fisc", "fisc_no_bonus", "fisc_no_agi_cap")
+REWEIGHTED_SCENARIOS = ("baseline", "fisc", "fisc_no_bonus")
+MOVED_BY_WEIGHTS = {
+    "household.household_weight",
+    "household.household_income_decile",
+    "tax_unit.tax_unit_weight",
+}
+# Saved weights carry single precision, so a ratio of two of them misses by a few
+# parts in ten million.
+WEIGHT_RATIO_TOLERANCE = 1e-6
+# A reweighted run moves no one's taxes, so a year's totals must match the current
+# run's arrays at the same factors. The gap reaches 3.6e-9 on these runs, on the Mac
+# and on GitHub's runners alike.
+ARRAY_TOTAL_TOLERANCE = 1e-6
 # Census Bureau, America's Families and Living Arrangements: 2023, in thousands.
 # Table C3: https://www2.census.gov/programs-surveys/demo/tables/families/2023/cps-2023/tabc3-all.xls
 # Table FG3, opposite-sex couples: https://www2.census.gov/programs-surveys/demo/tables/families/2023/cps-2023/tabfg3-all.xls
@@ -451,6 +471,10 @@ def check_two_runs(reform: dict, baseline: dict, label: str) -> dict:
     """Check two runs against each other for every tax unit and household."""
     results: dict[str, object] = {}
     check_same_records(reform, baseline, label)
+    # Neither the bonus nor the AGI cap moves anyone's AGI or base amount.
+    for name in ("tax_unit.adjusted_gross_income", BASE):
+        if not np.array_equal(reform[name], baseline[name]):
+            raise AssertionError(f"{label}: {name} differs between runs")
 
     credit = reform[CREDIT] - baseline[CREDIT]
     tax_gap = np.abs((baseline[INCOME_TAX] - reform[INCOME_TAX]) - credit)
@@ -522,6 +546,14 @@ def check_comparison_file(folder: Path, label: str) -> dict:
     fisc = load(folder, "fisc", PRIMARY_YEAR)
     no_bonus = load(folder, "fisc_no_bonus", PRIMARY_YEAR)
     check_same_records(current, fisc, label)
+    income_tax_change = weighted_sum(fisc, INCOME_TAX) - weighted_sum(
+        current, INCOME_TAX
+    )
+    household_tax_change = weighted_sum(fisc, "household.household_tax") - weighted_sum(
+        current, "household.household_tax"
+    )
+    if income_tax_change * household_tax_change <= 0:
+        raise AssertionError(f"{label}: income tax and household tax moved apart")
     check_saved_ranking(current, label)
     credit_gaps_from_the_bill(fisc, STATUTORY_BONUS_RATE)
     credit_gaps_from_the_bill(no_bonus, 0.0)
@@ -539,6 +571,42 @@ def check_comparison_file(folder: Path, label: str) -> dict:
         if abs(bonus - float(measure.sum())) > RELATIVE_TOLERANCE * abs(bonus):
             raise AssertionError(f"{label}: the credit and its effects disagree")
     return results | {f"{label}_bonus_measured_by_the_credit": bonus}
+
+
+def read_factors(path: Path) -> dict:
+    """The household ids, weight factors and file hash reweight.py saved."""
+    household_ids, factors = load_factors(path)
+    return {
+        "household_id": household_ids,
+        "factor": factors,
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }
+
+
+def check_reweighted_run(work: Path, folder: Path, factors: Path, label: str) -> None:
+    """A reweighted run must be the current run with each weight moved by its factor.
+
+    Reweighting changes no one's taxes, so every other array must match exactly. The
+    model ranks deciles on the weights, so those alone may differ.
+    """
+    saved = read_factors(factors)
+    for scenario in REWEIGHTED_SCENARIOS:
+        current = load(work, scenario, PRIMARY_YEAR)
+        run = load(folder, scenario, PRIMARY_YEAR)
+        if not np.array_equal(saved["household_id"], run["household.household_id"]):
+            raise AssertionError(f"{label}: the factors fit other households")
+        if set(current) - set(run):
+            raise AssertionError(f"{label}: {scenario} dropped an array")
+        for name in sorted(set(current) - MOVED_BY_WEIGHTS):
+            if not np.array_equal(run[name], current[name]):
+                raise AssertionError(f"{label}: {scenario} differs in {name}")
+        # The current baseline predates the saved person links, so they come from run.
+        expected = with_weight_factors(run | current, saved["factor"])
+        for name in ("household.household_weight", "tax_unit.tax_unit_weight"):
+            if np.abs(run[name] / expected[name] - 1).max() > WEIGHT_RATIO_TOLERANCE:
+                raise AssertionError(
+                    f"{label}: {scenario} missed the factors in {name}"
+                )
 
 
 def check_detail_runs(work: Path, detail: Path) -> None:
@@ -642,31 +710,54 @@ def check_invariants(work: Path, rerun: Path, detail: Path) -> dict:
 
 
 def check_the_decade(work: Path) -> dict:
-    """The later years keep every family as it stands and scale all weights alike."""
+    """The later years keep every family as it stands and scale all weights alike.
+
+    Every year's runs must also pay each tax unit the bill's closed form, with and
+    without the bonus, since the API checks a year's bonus only in total. The
+    closed form takes each unit's AGI and base amount from the run; the bonus
+    moves neither, so the two runs must agree on both.
+    """
     first = load(work, "fisc", PRIMARY_YEAR)
-    last = load(work, "fisc", LAST_YEAR)
-    for name in (
-        "household.household_id",
-        "tax_unit.tax_unit_id",
-        "person.person_household_id",
-        "person.person_tax_unit_id",
-        "tax_unit.age_head",
-        "tax_unit.age_spouse",
-        "tax_unit.joint",
-        BASE,
-        "household.household_count_people",
-    ):
-        if not np.array_equal(first[name], last[name]):
-            raise AssertionError(f"the later years changed {name}")
-    growth = np.concatenate(
-        [
-            last[f"{entity}.{entity}_weight"] / first[f"{entity}.{entity}_weight"]
-            for entity in ("household", "tax_unit")
-        ]
-    )
-    if growth.max() - growth.min() > WEIGHT_GROWTH_TOLERANCE:
-        raise AssertionError("the later years scaled weights unevenly")
-    return {"weight_growth_from_2026_to_2035": float(growth.mean())}
+    growths = {}
+    for year in YEARS:
+        fisc = load(work, "fisc", year)
+        no_bonus = load(work, "fisc_no_bonus", year)
+        for later in (fisc, no_bonus):
+            for name in (
+                "household.household_id",
+                "tax_unit.tax_unit_id",
+                "person.person_household_id",
+                "person.person_tax_unit_id",
+                "tax_unit.age_head",
+                "tax_unit.age_spouse",
+                "tax_unit.joint",
+                BASE,
+                "household.household_count_people",
+            ):
+                if not np.array_equal(first[name], later[name]):
+                    raise AssertionError(f"{year}: the later years changed {name}")
+        growth = np.concatenate(
+            [
+                fisc[f"{entity}.{entity}_weight"] / first[f"{entity}.{entity}_weight"]
+                for entity in ("household", "tax_unit")
+            ]
+        )
+        if growth.max() - growth.min() > WEIGHT_GROWTH_TOLERANCE:
+            raise AssertionError(f"{year}: the later years scaled weights unevenly")
+        for entity in ("household", "tax_unit"):
+            name = f"{entity}.{entity}_weight"
+            if not np.array_equal(fisc[name], no_bonus[name]):
+                raise AssertionError(f"{year}: the two runs weigh {entity}s apart")
+        agi = "tax_unit.adjusted_gross_income"
+        if not np.array_equal(fisc[agi], no_bonus[agi]):
+            raise AssertionError(f"{year}: the bonus moved AGI")
+        try:
+            credit_gaps_from_the_bill(fisc, STATUTORY_BONUS_RATE)
+            credit_gaps_from_the_bill(no_bonus, 0.0)
+        except AssertionError as error:
+            raise AssertionError(f"{year}: {error}") from None
+        growths[year] = float(growth.mean())
+    return {"weight_growth_from_2026_to_2035": growths[LAST_YEAR]}
 
 
 def bonus_gap_from_api(work: Path, year: int) -> dict:
@@ -717,7 +808,7 @@ def check_against_api(work: Path) -> dict:
     results: dict[str, object] = {}
 
     direct = api_result(FISC, NO_BONUS, PRIMARY_YEAR)
-    for year in CHECK_YEARS:
+    for year in YEARS:
         results |= bonus_gap_from_api(work, year)
 
     comparisons = {
@@ -836,6 +927,10 @@ def gini_by_provision(work: Path) -> pd.DataFrame:
                 * baseline["household.household_weight"]
             ).sum()
         )
+        if dollars == 0:
+            raise AssertionError(
+                f"{provision} moves no dollars between {with_it} and {without_it}"
+            )
         household_change = household_gini(reform) - household_gini(baseline)
         equivalised_change = equivalised_gini(reform) - equivalised_gini(baseline)
         rows.append(
@@ -896,6 +991,7 @@ def bonus_reach(work: Path) -> pd.DataFrame:
             "statutory_bonus": weight * base * joint * STATUTORY_BONUS_RATE,
             "bonus_lost_to_phase_out": weight * to_phase_out,
             "bonus_lost_to_agi_cap": weight * to_cap,
+            "units_receiving_the_bonus": weight * (fisc[CREDIT] > no_bonus[CREDIT]),
             "bonus": weight * (fisc[CREDIT] - no_bonus[CREDIT]),
         }
     )
@@ -977,7 +1073,7 @@ def distribution(work: Path) -> dict[str, pd.DataFrame]:
     }
 
 
-def versus_reeves(work: Path) -> pd.DataFrame:
+def versus_outside_estimate(work: Path) -> pd.DataFrame:
     fisc = load(work, "fisc", PRIMARY_YEAR)
     no_bonus = load(work, "fisc_no_bonus", PRIMARY_YEAR)
     weight = no_bonus["tax_unit.tax_unit_weight"]
@@ -990,8 +1086,8 @@ def versus_reeves(work: Path) -> pd.DataFrame:
     joint_base = float((no_bonus[BASE] * weight)[joint].sum())
     all_base = float((no_bonus[BASE] * weight).sum())
     rows = {
-        "reeves_estimate": REEVES_ESTIMATE,
-        "base_that_estimate_implies_at_20_percent": REEVES_ESTIMATE
+        "outside_estimate": OUTSIDE_ESTIMATE,
+        "base_that_estimate_implies_at_20_percent": OUTSIDE_ESTIMATE
         / STATUTORY_BONUS_RATE,
         "base_amount_all_filers": all_base,
         "base_amount_joint_filers": joint_base,
@@ -1002,7 +1098,7 @@ def versus_reeves(work: Path) -> pd.DataFrame:
         "joint_share_of_credit_without_bonus": joint_credit / all_credit,
         "twenty_percent_of_joint_credit": STATUTORY_BONUS_RATE * joint_credit,
         "modelled_bonus": bonus,
-        "modelled_bonus_less_reeves_estimate": bonus - REEVES_ESTIMATE,
+        "modelled_bonus_less_outside_estimate": bonus - OUTSIDE_ESTIMATE,
     }
     return pd.Series(rows, name="value").rename_axis("line").reset_index()
 
@@ -1142,6 +1238,54 @@ def deciles_by_data_file(ecps: Path, cps: Path, work: Path) -> pd.DataFrame:
     )
 
 
+def weight_factor_summary(work: Path, factors: dict[str, Path]) -> pd.DataFrame:
+    """How far each set moves the weights, and the sample its weights leave.
+
+    The effective sample is Kish's, the squared sum of the weights over the sum of
+    their squares, at the current run's 2026 weights times each set's factors.
+    """
+    current = load(work, "baseline", PRIMARY_YEAR)
+    weight = current["household.household_weight"].astype(float)
+
+    def effective_sample(weights: np.ndarray) -> float:
+        return float(weights.sum() ** 2 / (weights**2).sum())
+
+    rows = [
+        {
+            "weights": "todays_data",
+            "smallest_factor": 1.0,
+            "largest_factor": 1.0,
+            "effective_sample_of_households": effective_sample(weight),
+        }
+    ]
+    for label, path in factors.items():
+        saved = read_factors(path)
+        if not np.array_equal(saved["household_id"], current["household.household_id"]):
+            raise AssertionError(f"{label}: the factors fit other households")
+        rows.append(
+            {
+                "weights": label,
+                "smallest_factor": float(saved["factor"].min()),
+                "largest_factor": float(saved["factor"].max()),
+                "effective_sample_of_households": effective_sample(
+                    weight * saved["factor"]
+                ),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def deciles_by_weights(weights: dict[str, Path]) -> pd.DataFrame:
+    """The bonus by decile on each set of weights, ranked at those weights."""
+    return pd.concat(
+        [
+            bonus_by_decile(folder).assign(weights=label)
+            for label, folder in weights.items()
+        ],
+        ignore_index=True,
+    )
+
+
 def distribution_lines(folder: Path) -> dict:
     """Shares, concentration and Gini on one data file, ranked within that file."""
     current = load(folder, "baseline", PRIMARY_YEAR)
@@ -1251,34 +1395,41 @@ def sampling_spread(folder: Path) -> pd.DataFrame:
     )
 
 
+def file_lines(folder: Path, person_file: Path) -> dict:
+    """The bonus and who holds it on one set of runs."""
+    baseline = load(folder, "baseline", PRIMARY_YEAR)
+    fisc = load(folder, "fisc", PRIMARY_YEAR)
+    no_bonus = load(folder, "fisc_no_bonus", PRIMARY_YEAR)
+    weight = no_bonus["tax_unit.tax_unit_weight"]
+    joint = no_bonus["tax_unit.joint"].astype(bool)
+    base = no_bonus[BASE]
+    joint_base = float((base * weight)[joint].sum())
+    return {
+        "full_fisc_income_tax": float(
+            ((baseline[INCOME_TAX] - fisc[INCOME_TAX]) * weight).sum()
+        ),
+        "tax_units": float(weight.sum()),
+        "joint_tax_units": float(weight[joint].sum()),
+        "tax_units_with_a_child": float(weight[base > 0].sum()),
+        "joint_tax_units_with_a_child": float(weight[(base > 0) & joint].sum()),
+        "base_amount": float((base * weight).sum()),
+        "joint_base_amount": joint_base,
+        "joint_share_of_base_amount": joint_base / float((base * weight).sum()),
+        "statutory_bonus": STATUTORY_BONUS_RATE * joint_base,
+        "bonus": float(((fisc[CREDIT] - no_bonus[CREDIT]) * weight).sum()),
+        "credit": float((fisc[CREDIT] * weight).sum()),
+        **children_in_joint_units(fisc, read_arrays(person_file)),
+        **distribution_lines(folder),
+    }
+
+
 def data_comparison(ecps: Path, cps: Path, work: Path, detail: Path) -> pd.DataFrame:
     """The same model and reform on each data file, against the Census Bureau."""
-    columns = {}
-    for label, folder, person_file in (
-        ("march_2025_data", ecps, ecps / f"fisc_{PRIMARY_YEAR}_people.npz"),
-        ("cps_2024_data", cps, cps / f"fisc_{PRIMARY_YEAR}_people.npz"),
-        ("todays_data", work, detail / f"fisc_{PRIMARY_YEAR}_detail.npz"),
-    ):
-        fisc = load(folder, "fisc", PRIMARY_YEAR)
-        no_bonus = load(folder, "fisc_no_bonus", PRIMARY_YEAR)
-        weight = no_bonus["tax_unit.tax_unit_weight"]
-        joint = no_bonus["tax_unit.joint"].astype(bool)
-        base = no_bonus[BASE]
-        joint_base = float((base * weight)[joint].sum())
-        columns[label] = {
-            "tax_units": float(weight.sum()),
-            "joint_tax_units": float(weight[joint].sum()),
-            "tax_units_with_a_child": float(weight[base > 0].sum()),
-            "joint_tax_units_with_a_child": float(weight[(base > 0) & joint].sum()),
-            "base_amount": float((base * weight).sum()),
-            "joint_base_amount": joint_base,
-            "joint_share_of_base_amount": joint_base / float((base * weight).sum()),
-            "statutory_bonus": STATUTORY_BONUS_RATE * joint_base,
-            "bonus": float(((fisc[CREDIT] - no_bonus[CREDIT]) * weight).sum()),
-            "credit": float((fisc[CREDIT] * weight).sum()),
-            **children_in_joint_units(fisc, read_arrays(person_file)),
-            **distribution_lines(folder),
-        }
+    columns = {
+        "march_2025_data": file_lines(ecps, ecps / f"fisc_{PRIMARY_YEAR}_people.npz"),
+        "cps_2024_data": file_lines(cps, cps / f"fisc_{PRIMARY_YEAR}_people.npz"),
+        "todays_data": file_lines(work, detail / f"fisc_{PRIMARY_YEAR}_detail.npz"),
+    }
     columns["census_2023"] = {
         "joint_tax_units": 1e3 * CENSUS_2023["married_couple_family_groups"],
         "joint_tax_units_with_a_child": 1e3
@@ -1292,11 +1443,139 @@ def data_comparison(ecps: Path, cps: Path, work: Path, detail: Path) -> pd.DataF
     return pd.DataFrame(columns).rename_axis("line").reset_index()
 
 
-def check_the_answer_on_every_file(table: pd.DataFrame) -> dict:
+def reweighted_comparison(
+    work: Path, detail: Path, weights: dict[str, Path]
+) -> pd.DataFrame:
+    """The current file at its own weights and at each set from reweight.py."""
+    columns = {
+        "todays_data": file_lines(work, detail / f"fisc_{PRIMARY_YEAR}_detail.npz"),
+        **{
+            label: file_lines(folder, folder / f"fisc_{PRIMARY_YEAR}_people.npz")
+            for label, folder in weights.items()
+        },
+    }
+    return pd.DataFrame(columns).rename_axis("line").reset_index()
+
+
+def check_arrays_behind_the_decade(
+    year: int, totals: dict, work: Path, saved: dict[str, np.ndarray]
+) -> None:
+    """The current run's arrays for a year, at these factors, must give its totals.
+
+    Each scenario's totals must match, and so must the bonus between them, since a
+    small error in a large total can be a large error in the bonus.
+    """
+    from_arrays = {}
+    for scenario, measured in totals.items():
+        arrays = load(work, scenario, year)
+        if not np.array_equal(saved["household_id"], arrays["household.household_id"]):
+            raise AssertionError(f"{year}: the factors fit other households")
+        weight = with_weight_factors(arrays, saved["factor"])[
+            "tax_unit.tax_unit_weight"
+        ]
+        from_arrays[scenario] = {}
+        for name, expected in (
+            ("family_income_supplement_credit", arrays[CREDIT]),
+            ("income_tax", arrays[INCOME_TAX]),
+        ):
+            from_arrays[scenario][name] = float(expected @ weight)
+            if abs(measured[name] - from_arrays[scenario][name]) > (
+                ARRAY_TOTAL_TOLERANCE * abs(from_arrays[scenario][name])
+            ):
+                raise AssertionError(
+                    f"{year}: {scenario} misses the current run at these weights"
+                )
+    for name in ("family_income_supplement_credit", "income_tax"):
+        expected = from_arrays["fisc"][name] - from_arrays["fisc_no_bonus"][name]
+        measured = totals["fisc"][name] - totals["fisc_no_bonus"][name]
+        if abs(measured - expected) > ARRAY_TOTAL_TOLERANCE * abs(expected):
+            raise AssertionError(f"{year}: the bonus misses the current run's arrays")
+
+
+def reweighted_decade(
+    folder: Path,
+    full_year: Path,
+    work: Path,
+    factors: Path,
+) -> pd.DataFrame:
+    """Each year's bonus on one set of weights, from decade.py's two runs a year.
+
+    Every year must record the sha256 of this set's factor file, and the current
+    run saved arrays for every year, so each year must match them at these factors,
+    bonus included.
+    """
+    bundle = json.loads((work / f"fisc_{PRIMARY_YEAR}.json").read_text())["bundle"]
+    saved = read_factors(factors)
+    rows = []
+    for year in YEARS:
+        decade_year = json.loads((folder / f"decade_{year}.json").read_text())
+        if decade_year["year"] != year:
+            raise AssertionError(f"decade_{year}.json holds {decade_year['year']}")
+        if decade_year["bundle"] != bundle:
+            raise AssertionError(f"{year}: the decade run used another bundle")
+        if decade_year.get("factors_sha256") != saved["sha256"]:
+            raise AssertionError(f"{year}: the decade run used other factors")
+        totals = decade_year["totals"]
+        fisc, no_bonus = totals["fisc"], totals["fisc_no_bonus"]
+        check_arrays_behind_the_decade(year, totals, work, saved)
+        bonus = (
+            fisc["family_income_supplement_credit"]
+            - no_bonus["family_income_supplement_credit"]
+        )
+        income_tax = fisc["income_tax"] - no_bonus["income_tax"]
+        # Income tax and the credit share rounding only, so the gap stays small.
+        if abs(bonus + income_tax) > RELATIVE_TOLERANCE * abs(bonus):
+            raise AssertionError(f"{year}: the credit and income tax disagree")
+        rows.append(
+            {
+                "year": year,
+                "bonus": bonus,
+                "income_tax_change": income_tax,
+                "full_fisc_credit": fisc["family_income_supplement_credit"],
+            }
+        )
+    table = pd.DataFrame(rows).set_index("year")
+    first_year = load(full_year, "fisc", PRIMARY_YEAR)
+    in_the_full_run = float(
+        (
+            (
+                first_year[CREDIT]
+                - load(full_year, "fisc_no_bonus", PRIMARY_YEAR)[CREDIT]
+            )
+            * first_year["tax_unit.tax_unit_weight"]
+        ).sum()
+    )
+    gap = abs(table.loc[PRIMARY_YEAR, "bonus"] - in_the_full_run)
+    if gap > RELATIVE_TOLERANCE * in_the_full_run:
+        raise AssertionError("the decade run and the full run disagree on 2026")
+    table.loc["2026-2035"] = table.sum()
+    return table
+
+
+def reweighted_decades(
+    decades: dict[str, Path],
+    weights: dict[str, Path],
+    work: Path,
+    factors: dict[str, Path],
+) -> pd.DataFrame:
+    """Each year's bonus on every set of weights that ran the whole window."""
+    tables = [
+        reweighted_decade(folder, weights[label], work, factors[label]).assign(
+            weights=label
+        )
+        for label, folder in decades.items()
+    ]
+    return pd.concat(tables).rename_axis("year").reset_index().astype({"year": str})
+
+
+def check_the_answer_on_every_file(
+    table: pd.DataFrame,
+    labels: tuple[str, ...] = ("march_2025_data", "cps_2024_data", "todays_data"),
+) -> dict:
     """The regressivity answer must hold on each data file, on both rankings."""
     lines = table.set_index("line")
     results = {}
-    for label in ("march_2025_data", "cps_2024_data", "todays_data"):
+    for label in labels:
         column = lines[label].dropna()
         if len(column) < len(lines[label]) or not np.isfinite(column).all():
             raise AssertionError(f"{label}: a line is not finite")
@@ -1327,14 +1606,19 @@ TEXT_COLUMNS = {
     "component_summary_2026": {"ranking", "component"},
     "cps_sampling_spread_2026": {"line"},
     "data_comparison_2026": {"line"},
+    "reweighted_comparison_2026": {"line"},
     "deciles_by_component_2026": {"ranking", "component"},
     "deciles_by_data_file_2026": {"data_file"},
+    "deciles_by_weights_2026": {"weights"},
     "gini_by_provision_2026": {"provision"},
     "march_2025_ladder": {"rung"},
     "march_2025_step_orders": {"step"},
     "poverty_2026": {"comparison", "group"},
     "provisions_2026": {"provision", "path"},
-    "versus_reeves_estimate": {"line"},
+    "provisions_by_file_2026": {"file", "provision"},
+    "reweighted_budget_by_year": {"year", "weights"},
+    "versus_outside_estimate": {"line"},
+    "weight_factors": {"weights"},
 }
 
 
@@ -1376,7 +1660,15 @@ def check_tables_are_finite(tables: dict[str, pd.DataFrame]) -> None:
 
 
 def main(
-    work: Path, rerun: Path, march: Path, ecps: Path, cps: Path, detail: Path
+    work: Path,
+    rerun: Path,
+    march: Path,
+    ecps: Path,
+    cps: Path,
+    detail: Path,
+    weights: dict[str, Path],
+    decades: dict[str, Path],
+    factors: dict[str, Path],
 ) -> None:
     marker = RESULTS / "invariants.json"
     marker.unlink(missing_ok=True)
@@ -1390,8 +1682,13 @@ def main(
         | check_comparison_file(ecps, "march_2025_data")
         | check_comparison_file(cps, "cps_2024_data")
     )
+    for label, folder in weights.items():
+        check_reweighted_run(work, folder, factors[label], label)
+        invariants |= check_comparison_file(folder, label)
     comparison = data_comparison(ecps, cps, work, detail)
     invariants |= check_the_answer_on_every_file(comparison)
+    reweighted_table = reweighted_comparison(work, detail, weights)
+    invariants |= check_the_answer_on_every_file(reweighted_table, tuple(weights))
     years, ladder, orders = reconciliation(march, ecps, work)
     agi_cap_row, poverty_invariants = agi_cap_provision(work, detail)
     invariants |= poverty_invariants
@@ -1406,10 +1703,16 @@ def main(
         **{f"{name}_2026": table for name, table in distribution(work).items()},
         "gini_by_provision_2026": gini_by_provision(work),
         "bonus_reach_2026": bonus_reach(work),
-        "versus_reeves_estimate": versus_reeves(work),
+        "versus_outside_estimate": versus_outside_estimate(work),
         "march_2025_ladder": ladder,
         "march_2025_step_orders": orders,
         "data_comparison_2026": comparison,
+        "reweighted_comparison_2026": reweighted_table,
+        "reweighted_budget_by_year": reweighted_decades(
+            decades, weights, work, factors
+        ),
+        "deciles_by_weights_2026": deciles_by_weights(weights),
+        "weight_factors": weight_factor_summary(work, factors),
         "deciles_by_data_file_2026": deciles_by_data_file(ecps, cps, work),
         "cps_sampling_spread_2026": sampling_spread(cps),
     }
@@ -1427,6 +1730,11 @@ def main(
     marker.write_text(marker_text)
 
 
+def labelled_folders(items: list[str]) -> dict[str, Path]:
+    """Read label=folder pairs from the command line."""
+    return {label: Path(folder) for label, folder in (i.split("=", 1) for i in items)}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--work", type=Path, required=True)
@@ -1435,5 +1743,18 @@ if __name__ == "__main__":
     parser.add_argument("--ecps", type=Path, required=True)
     parser.add_argument("--cps", type=Path, required=True)
     parser.add_argument("--detail", type=Path, required=True)
+    parser.add_argument("--weights", nargs="+", required=True, metavar="LABEL=DIR")
+    parser.add_argument("--decades", nargs="+", required=True, metavar="LABEL=DIR")
+    parser.add_argument("--factors", nargs="+", required=True, metavar="LABEL=FILE")
     args = parser.parse_args()
-    main(args.work, args.rerun, args.march, args.ecps, args.cps, args.detail)
+    main(
+        args.work,
+        args.rerun,
+        args.march,
+        args.ecps,
+        args.cps,
+        args.detail,
+        labelled_folders(args.weights),
+        labelled_folders(args.decades),
+        labelled_folders(args.factors),
+    )

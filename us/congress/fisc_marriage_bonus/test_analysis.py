@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from hypothesis import given, settings
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra import numpy as hnp
+from microdf import MicroSeries
 
 from analysis import (
     FISC_POLICY,
@@ -140,7 +141,92 @@ class TestBonusLostToLimits:
             assert float(to_cap) == pytest.approx(0, abs=1e-6)
 
 
+@st.composite
+def tied_households(draw):
+    """Households whose incomes come from a few values, so most of them tie."""
+    n = draw(SIZE)
+    return {
+        "income": draw(
+            hnp.arrays(
+                float, n, elements=st.sampled_from([-500.0, 0.0, 1e3, 2e3, 5e4, 7e5])
+            )
+        ),
+        "weight": draw(hnp.arrays(float, n, elements=floats(1, 5_000))),
+        "people": draw(hnp.arrays(int, n, elements=st.integers(1, 8))),
+    }
+
+
+@st.composite
+def zero_weight_households(draw):
+    """Tied households where many carry no weight, and at least one carries some."""
+    n = draw(SIZE)
+    weight = draw(
+        hnp.arrays(float, n, elements=st.sampled_from([0.0, 0.0, 1.0, 17.5, 5_000.0]))
+    )
+    assume(weight.sum() > 0)
+    return {
+        "income": draw(
+            hnp.arrays(
+                float, n, elements=st.sampled_from([-500.0, 0.0, 1e3, 2e3, 5e4, 7e5])
+            )
+        ),
+        "weight": weight,
+        "people": draw(hnp.arrays(int, n, elements=st.integers(1, 8))),
+    }
+
+
+class TestWeightedDecile:
+    def test_a_tie_at_a_decile_line_lands_above_it(self):
+        # The shares of the family income run's tie at the 70th percentile.
+        groups = weighted_decile(
+            np.array([1.0, 2.0, 2.0, 3.0]),
+            np.array([0.699687742, 0.000110572, 0.00023583, 0.299965856]),
+            np.ones(4),
+        )
+        assert groups.tolist() == [7, 8, 8, 10]
+
+    @settings(deadline=None)
+    @given(tied_households())
+    def test_tied_households_share_a_group(self, hh):
+        groups = weighted_decile(hh["income"], hh["weight"], hh["people"])
+        for income in np.unique(hh["income"]):
+            assert np.unique(groups[hh["income"] == income]).size == 1
+
+    @settings(deadline=None)
+    @given(
+        st.one_of(households(), tied_households(), zero_weight_households()),
+    )
+    def test_matches_the_ranking_the_model_uses(self, hh):
+        # household_income_decile ranks with MicroSeries.decile_rank, then sets
+        # negative incomes to their own group.
+        model = MicroSeries(
+            hh["income"], weights=hh["weight"] * hh["people"]
+        ).decile_rank()
+        expected = np.where(
+            hh["income"] < 0, NEGATIVE_INCOME_GROUP, np.asarray(model, dtype=float)
+        )
+        groups = weighted_decile(hh["income"], hh["weight"], hh["people"])
+        assert np.array_equal(groups, expected)
+
+    def test_a_household_below_all_the_weight_takes_decile_zero(self):
+        # microdf's decile_rank clips only from above, so zero cumulative weight
+        # gives zero.
+        groups = weighted_decile(
+            np.array([0.0, 1.0]), np.array([0.0, 1.0]), np.array([1, 1])
+        )
+        assert groups.tolist() == [0, 10]
+
+    def test_households_with_no_weight_cannot_rank(self):
+        income, weight, people = np.array([0.0, 1.0]), np.zeros(2), np.array([1, 1])
+        with pytest.raises(ZeroDivisionError):
+            MicroSeries(income, weights=weight * people).decile_rank()
+        with pytest.raises(ZeroDivisionError):
+            weighted_decile(income, weight, people)
+
+
 class TestDecileTable:
+    # Host load can push one example past Hypothesis's 200 ms default.
+    @settings(deadline=None)
     @given(households())
     def test_rows_sum_to_the_aggregate(self, hh):
         groups = weighted_decile(hh["income"], hh["weight"], hh["people"])
@@ -149,6 +235,7 @@ class TestDecileTable:
         assert table.dollars.sum() == pytest.approx(aggregate, rel=1e-9, abs=1e-6)
         assert table.households.sum() == pytest.approx(hh["weight"].sum(), rel=1e-9)
 
+    @settings(deadline=None)
     @given(households())
     def test_shares_sum_to_one_when_any_dollars_flow(self, hh):
         groups = weighted_decile(hh["income"], hh["weight"], hh["people"])
@@ -156,12 +243,14 @@ class TestDecileTable:
         if table.dollars.sum() > 0:
             assert table.share_of_total.sum() == pytest.approx(1)
 
+    @settings(deadline=None)
     @given(households())
     def test_receipt_shares_are_proportions(self, hh):
         groups = weighted_decile(hh["income"], hh["weight"], hh["people"])
         table = decile_table(groups, hh["amount"], hh["income"], hh["weight"])
         assert table.share_of_households_receiving.between(0, 1).all()
 
+    @settings(deadline=None)
     @given(households())
     def test_groups_are_ordered_by_income(self, hh):
         groups = weighted_decile(hh["income"], hh["weight"], hh["people"])
@@ -169,6 +258,7 @@ class TestDecileTable:
         order = np.argsort(hh["income"][ranked], kind="stable")
         assert (np.diff(groups[ranked][order]) >= 0).all()
 
+    @settings(deadline=None)
     @given(households())
     def test_negative_incomes_take_their_own_group(self, hh):
         groups = weighted_decile(hh["income"], hh["weight"], hh["people"])

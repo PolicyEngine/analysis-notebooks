@@ -1,0 +1,73 @@
+# A record of the workflow that ran all seven scenarios in provisions.py on all seven
+# files and sets of weights, on GitHub's hosted runners:
+# https://github.com/PolicyEngine/analysis-notebooks/actions/runs/42218930233
+# It ran from a scratch branch at commit 2e2c08e, with this folder's factors/ and
+# requirements_github_runs.txt. To run it again, copy it to .github/workflows on a new
+# branch cut from this folder's commit, name that branch in the push trigger, download
+# the artifacts with `gh run download`, and move each {set}-{scenario} folder's files
+# into a folder named for its set. These artifacts expire on 2027-02-04.
+name: FISC provisions on every file
+on:
+  push:
+    branches: [fisc-provision-runs]
+permissions:
+  contents: read
+jobs:
+  run:
+    name: ${{ matrix.set }} ${{ matrix.scenario }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        set: [current, household_counts, family_income, child_credit, all_targets, cps, march]
+        scenario:
+          [baseline, fisc, fisc_no_bonus, fisc_ctc_repeal_only, fisc_no_newborn_add_on, fisc_no_phase_out, fisc_no_agi_cap]
+    defaults:
+      run:
+        working-directory: us/congress/fisc_marriage_bonus
+    env:
+      OMP_NUM_THREADS: "4"
+      PYTHONPATH: "."
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install the pinned bundle
+        run: |
+          uv venv --python 3.13.9 .venv
+          uv pip install --python .venv/bin/python -r requirements_github_runs.txt
+      - name: Run the scenario
+        run: |
+          mkdir -p out
+          HF=https://huggingface.co/policyengine/policyengine-us-data/resolve
+          case "${{ matrix.set }}" in
+            current)
+              ARGS=(--people --detail) ;;
+            cps)
+              curl -sSfL -o cps_2024.h5 "$HF/21280dca5995e978d706740a8a4b9b7860cfd7b6/cps_2024.h5"
+              echo "16b8cdbdc2c83d102fedb0f557d6de0a28344df4dacedb7ce95b587deef84fbc  cps_2024.h5" | sha256sum -c -
+              ARGS=(--people --dataset cps_2024.h5) ;;
+            march)
+              curl -sSfL -o enhanced_cps_2024.h5 "$HF/0611cbeda35ab2d9f6f87122c8af353f0f0a887d/enhanced_cps_2024.h5"
+              echo "25e0e6a15fc8f7402d86b6b581be1c93e7181c4075061d47fb255f21d889f2eb  enhanced_cps_2024.h5" | sha256sum -c -
+              ARGS=(--people --dataset enhanced_cps_2024.h5) ;;
+            *)
+              ARGS=(--people --detail --weight-factors "factors/factors_${{ matrix.set }}.npz") ;;
+          esac
+          {
+            git rev-parse HEAD
+            uname -a
+            .venv/bin/python --version
+            sha256sum run.py analysis.py reweight.py factors/*.npz
+          } > out/platform.txt
+          .venv/bin/python run.py "${{ matrix.scenario }}" 2026 --out out "${ARGS[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ matrix.set }}-${{ matrix.scenario }}
+          path: |
+            us/congress/fisc_marriage_bonus/out/*.npz
+            us/congress/fisc_marriage_bonus/out/*.json
+            us/congress/fisc_marriage_bonus/out/*.txt
+          retention-days: 90
